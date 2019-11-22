@@ -9,6 +9,14 @@ static HMODULE g_opengl;
 #define WIN32_MENU_NAME "Zen Win32 Menu"
 #define WIN32_CLASS_NAME "Zen Win32 Class"
 
+static void* win32_gl_get_proc(const char* name);
+static HGLRC win32_gl_context_make(HDC dc,
+                                   int color_bits,
+                                   int depth_bits,
+                                   int stencil_bits,
+                                   int major_version,
+                                   int minor_version);
+
 LRESULT CALLBACK win32_message_callback(HWND window,
                                         UINT msg,
                                         WPARAM wp,
@@ -28,7 +36,12 @@ bool win32_app_init(Win32App* app,
                     HINSTANCE instance,
                     const char* title,
                     int width,
-                    int height)
+                    int height,
+                    int color_bits,
+                    int depth_bits,
+                    int stencil_bits,
+                    int gl_major_version,
+                    int gl_minor_version)
 {
     bool result = false;
 
@@ -54,8 +67,12 @@ bool win32_app_init(Win32App* app,
 
         if (window)
         {
-            app->window = window;
             app->instance = instance;
+            app->window = window;
+            app->dc = GetDC(app->window);
+            app->rc = win32_gl_context_make(app->dc, color_bits, depth_bits,
+                                            stencil_bits, gl_major_version,
+                                            gl_minor_version);
             result = true;
         }
     }
@@ -86,14 +103,13 @@ static void* win32_gl_get_proc(const char* name)
     return proc;
 }
 
-HGLRC win32_gl_context_make(HWND window,
-                            int color_bits,
-                            int depth_bits,
-                            int stencil_bits,
-                            int major_version,
-                            int minor_version)
+static HGLRC win32_gl_context_make(HDC dc,
+                                   int color_bits,
+                                   int depth_bits,
+                                   int stencil_bits,
+                                   int major_version,
+                                   int minor_version)
 {
-    HDC dc = GetDC(window);
     PIXELFORMATDESCRIPTOR pfd_dummy = {
         .nSize = sizeof(PIXELFORMATDESCRIPTOR),
         .nVersion = 1,
@@ -134,8 +150,8 @@ HGLRC win32_gl_context_make(HWND window,
                              WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
                              0};
 
-    ASSERT(gladLoadWGLLoader((GLADloadproc)&win32_gl_get_proc, GetDC(window)));
-    ASSERT(gladLoadWGL(GetDC(window)));
+    ASSERT(gladLoadWGLLoader((GLADloadproc)&win32_gl_get_proc, dc));
+    ASSERT(gladLoadWGL(dc));
 
     wglMakeCurrent(NULL, NULL);
     wglDeleteContext(rc_dummy);

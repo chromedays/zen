@@ -15,8 +15,7 @@ int CALLBACK WinMain(HINSTANCE instance,
                      int cmd)
 {
     Win32App app = {0};
-    ASSERT(win32_app_init(&app, instance, "Zen", 1280, 720));
-    HGLRC rc = win32_gl_context_make(app.window, 32, 24, 8, 3, 3);
+    ASSERT(win32_app_init(&app, instance, "Zen", 1280, 720, 32, 24, 8, 3, 3));
 
     g_win32_state.running = true;
 
@@ -34,6 +33,11 @@ int CALLBACK WinMain(HINSTANCE instance,
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
+
+        glClearColor(0.3f, 0.3f, 0.5f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        SwapBuffers(app.dc);
     }
 
     win32_app_cleanup(&app);
