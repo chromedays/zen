@@ -65,6 +65,7 @@ local function internal_simple_win32_cpp(name, static_libs, clang_format_path, p
 
         files {
             dep_root .. '**.h',
+            dep_root .. '**.c',
             src_root .. '*.h',
             -- src_root .. '*.hpp',
             src_root .. '*.c',

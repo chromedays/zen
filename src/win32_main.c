@@ -1,4 +1,5 @@
 #include "debug.h"
+#include <himath.h>
 #include <stdbool.h>
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -37,13 +38,8 @@ int CALLBACK WinMain(HINSTANCE instance,
                         .bottom = ZEN_WINDOW_HEIGHT};
     AdjustWindowRectEx(&window_rect, window_style, 0, 0);
 
-    typedef struct XY_
-    {
-        int x;
-        int y;
-    } XY;
-    XY actual_window_size = {window_rect.right - window_rect.left,
-                             window_rect.bottom - window_rect.top};
+    IVec2 actual_window_size = {window_rect.right - window_rect.left,
+                                window_rect.bottom - window_rect.top};
 
     HWND window =
         CreateWindowExA(0, ZEN_WIN32_CLASS_NAME, ZEN_WINDOW_TITLE, window_style,
