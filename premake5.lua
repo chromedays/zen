@@ -35,13 +35,13 @@ local function internal_simple_win32_cpp(name, static_libs, clang_format_path, p
 
     project(name .. '_win32')
         kind(proj_kind)
-        language 'C++'
+        language 'C'
         architecture 'x86_64'
         buildoptions '/std:c++latest'
         characterset 'MBCS'
         warnings 'Extra'
         flags {'FatalCompileWarnings'}
-        disablewarnings {'4189', '4505', '4201'}
+        disablewarnings {'4189', '4505', '4201', '4100', '4204'}
         defines {'_CRT_SECURE_NO_WARNINGS'}
 
         targetdir(build_root .. "%{cfg.buildcfg}")
@@ -66,9 +66,9 @@ local function internal_simple_win32_cpp(name, static_libs, clang_format_path, p
         files {
             dep_root .. '**.h',
             src_root .. '*.h',
-            src_root .. '*.hpp',
+            -- src_root .. '*.hpp',
             src_root .. '*.c',
-            src_root .. '*.cpp',
+            -- src_root .. '*.cpp',
             src_root .. '*.inl',
         }
 
