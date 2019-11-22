@@ -1,9 +1,8 @@
+#include <glad/glad_wgl.h>
+#include "primitive.h"
 #include "debug.h"
 #include <himath.h>
 #include <stdbool.h>
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <Windows.h>
 
 #define ZEN_WIN32_MENU_NAME "Zen Win32 Menu"
 #define ZEN_WIN32_CLASS_NAME "Zen Win32 Class"
@@ -11,10 +10,22 @@
 #define ZEN_WINDOW_WIDTH 1280
 #define ZEN_WINDOW_HEIGHT 720
 
+typedef struct _Win32GlobalState
+{
+    bool running;
+} Win32GlobalState;
+
+Win32GlobalState g_win32_state;
+
 LRESULT CALLBACK win32_message_callback(HWND window,
                                         UINT msg,
                                         WPARAM wp,
                                         LPARAM lp);
+
+void* win32_gl_get_proc(const char* name);
+HGLRC win32_gl_context_make(HWND window,
+                            int* pixel_format_attribs,
+                            int* context_attribs);
 
 int CALLBACK WinMain(HINSTANCE instance,
                      HINSTANCE prev_instance,
@@ -47,17 +58,52 @@ int CALLBACK WinMain(HINSTANCE instance,
                         actual_window_size.y, NULL, NULL, instance, NULL);
     ASSERT(window);
 
-    char exe_path_raw[MAX_PATH];
-    DWORD exe_path_length =
-        GetModuleFileNameA(instance, exe_path_raw, sizeof(exe_path_raw));
-    for (int i = (int)exe_path_length; i >= 0; --i)
+    int pixel_format_attribs[] = {WGL_DRAW_TO_WINDOW_ARB,
+                                  GL_TRUE,
+                                  WGL_SUPPORT_OPENGL_ARB,
+                                  GL_TRUE,
+                                  WGL_DOUBLE_BUFFER_ARB,
+                                  GL_TRUE,
+                                  WGL_PIXEL_TYPE_ARB,
+                                  WGL_TYPE_RGBA_ARB,
+                                  WGL_COLOR_BITS_ARB,
+                                  32,
+                                  WGL_DEPTH_BITS_ARB,
+                                  24,
+                                  WGL_STENCIL_BITS_ARB,
+                                  8,
+                                  0};
+    int context_attribs[] = {WGL_CONTEXT_MAJOR_VERSION_ARB,
+                             3,
+                             WGL_CONTEXT_MINOR_VERSION_ARB,
+                             3,
+                             WGL_CONTEXT_PROFILE_MASK_ARB,
+                             WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+                             0};
+    HGLRC rc =
+        win32_gl_context_make(window, pixel_format_attribs, context_attribs);
+
+    g_win32_state.running = true;
+
+    while (g_win32_state.running)
     {
-        if (exe_path_raw[i] == '\\')
+        MSG msg = {0};
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
         {
-            exe_path_raw[i + 1] = '\0';
-            break;
+            if (msg.message == WM_QUIT)
+            {
+                g_win32_state.running = false;
+                break;
+            }
+
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
         }
     }
+
+    DestroyWindow(window);
+    UnregisterClass(ZEN_WIN32_CLASS_NAME, instance);
+
     return 0;
 }
 
@@ -70,13 +116,72 @@ LRESULT CALLBACK win32_message_callback(HWND window,
 
     switch (msg)
     {
-    case WM_SYSKEYDOWN:
-    case WM_SYSKEYUP:
-    case WM_KEYDOWN:
-    case WM_KEYUP:
-    case WM_QUIT: ASSERT(false); break;
     case WM_CLOSE: PostQuitMessage(0); break;
     default: result = DefWindowProcA(window, msg, wp, lp);
     }
     return result;
+}
+
+void* win32_gl_get_proc(const char* name)
+{
+    static HMODULE opengl = 0;
+
+    if (!opengl)
+        opengl = LoadLibrary("opengl32.dll");
+
+    void* proc = NULL;
+
+    if (opengl)
+    {
+        proc = (void*)wglGetProcAddress(name);
+        if (!proc)
+            proc = (void*)GetProcAddress(opengl, name);
+    }
+
+    return proc;
+}
+
+HGLRC win32_gl_context_make(HWND window,
+                            int* pixel_format_attribs,
+                            int* context_attribs)
+{
+    HDC dc = GetDC(window);
+    PIXELFORMATDESCRIPTOR pfd_dummy = {
+        .nSize = sizeof(PIXELFORMATDESCRIPTOR),
+        .nVersion = 1,
+        .dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
+        .iPixelType = PFD_TYPE_RGBA,
+        .cColorBits = 32,
+        .cDepthBits = 24,
+        .cStencilBits = 8};
+
+    int pixelformat_dummy = ChoosePixelFormat(dc, &pfd_dummy);
+    SetPixelFormat(dc, pixelformat_dummy, &pfd_dummy);
+
+    HGLRC rc_dummy = wglCreateContext(dc);
+    wglMakeCurrent(dc, rc_dummy);
+
+    ASSERT(wglGetCurrentContext());
+
+    ASSERT(gladLoadWGLLoader((GLADloadproc)&win32_gl_get_proc, GetDC(window)));
+    ASSERT(gladLoadWGL(GetDC(window)));
+
+    wglMakeCurrent(NULL, NULL);
+    wglDeleteContext(rc_dummy);
+
+    int pixelformat;
+    uint format_count;
+    ASSERT(wglChoosePixelFormatARB(dc, pixel_format_attribs, NULL, 1,
+                                   &pixelformat, &format_count));
+    ASSERT(SetPixelFormat(dc, pixelformat, NULL));
+
+    HGLRC rc = wglCreateContextAttribsARB(dc, NULL, context_attribs);
+    ASSERT(rc);
+
+    wglMakeCurrent(dc, rc);
+
+    ASSERT(gladLoadGLLoader((GLADloadproc)&win32_gl_get_proc));
+    ASSERT(gladLoadGL());
+
+    return rc;
 }

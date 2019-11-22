@@ -5,3 +5,5 @@
 #include <himath.h>
 #define HISTR_IMPL
 #include <histr.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>

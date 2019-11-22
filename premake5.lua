@@ -92,4 +92,4 @@ function simple_win32_console_cpp(name, static_libs, clang_format_path)
     internal_simple_win32_cpp(name, static_libs, clang_format_path, 'ConsoleApp')
 end
 
-simple_win32_windowed_cpp('zen', {'winmm', 'opengl32'})
+simple_win32_windowed_cpp('zen', {'user32', 'winmm', 'opengl32'})
