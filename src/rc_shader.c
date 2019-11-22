@@ -6,7 +6,7 @@ static GLuint
     rc_shader_compile(GLenum type, const char** sources, int sources_count);
 static GLuint rc_shader_combine(GLuint vs, GLuint fs);
 
-GLuint rc_shader_make_from_source(const char* vs_src,
+GLuint rc_shader_load_from_source(const char* vs_src,
                                   const char* fs_src,
                                   const char** includes,
                                   int includes_count)
