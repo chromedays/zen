@@ -72,11 +72,10 @@ Mesh rc_mesh_make_sphere(float radius, int slices_count, int stacks_count)
     Mesh result = {0};
     if (slices_count > 2 && stacks_count > 1)
     {
-        int vertices_count = (stacks_count - 1) * slices_count + 2;
-        Vertex* vertices =
-            (Vertex*)calloc(1, vertices_count * sizeof(*vertices));
-        int indices_count = (stacks_count - 1) * slices_count * 6;
-        uint* indices = (uint*)malloc(stacks_count * sizeof(*indices));
+        const int vertices_count = (stacks_count - 2) * slices_count + 2;
+        Vertex* vertices = (Vertex*)malloc(vertices_count * sizeof(*vertices));
+        const int indices_count = (stacks_count - 2) * slices_count * 6;
+        uint* indices = (uint*)malloc(indices_count * sizeof(*indices));
 
         const float d_phi = degtorad(180) / (float)stacks_count;
         const float d_theta = degtorad(360) / (float)slices_count;
@@ -105,19 +104,19 @@ Mesh rc_mesh_make_sphere(float radius, int slices_count, int stacks_count)
 
         int ii = 0;
 
-        for (int i = 0; i < stacks_count - 2; ++i)
+        for (int i = 1; i < stacks_count - 2; ++i)
         {
             for (int j = 0; j < slices_count; ++j)
             {
                 int j0 = j;
                 int j1 = (j + 1) % slices_count;
 
-                indices[ii++] = i * slices_count + j1;
-                indices[ii++] = (i + 1) * slices_count + j0;
-                indices[ii++] = (i + 1) * slices_count + j1;
-                indices[ii++] = (i + 1) * slices_count + j0;
+                indices[ii++] = (i - 1) * slices_count + j1;
+                indices[ii++] = i * slices_count + j0;
                 indices[ii++] = i * slices_count + j1;
                 indices[ii++] = i * slices_count + j0;
+                indices[ii++] = (i - 1) * slices_count + j1;
+                indices[ii++] = (i - 1) * slices_count + j0;
             }
         }
 
@@ -132,8 +131,8 @@ Mesh rc_mesh_make_sphere(float radius, int slices_count, int stacks_count)
         for (int i = 0; i < slices_count; ++i)
         {
             int i1 = (i + 1) % slices_count;
-            indices[ii++] = (stacks_count - 2) * slices_count + i1;
-            indices[ii++] = (stacks_count - 2) * slices_count + i;
+            indices[ii++] = (stacks_count - 3) * slices_count + i1;
+            indices[ii++] = (stacks_count - 3) * slices_count + i;
             indices[ii++] = vi - 1;
         }
 
@@ -144,7 +143,7 @@ Mesh rc_mesh_make_sphere(float radius, int slices_count, int stacks_count)
         v->normal.x = 0.f;
         v->normal.y = -1.f;
         v->normal.z = 0.f;
-        for (int i = 0; i < slices_count++; ++i)
+        for (int i = 0; i < slices_count; ++i)
         {
             int i1 = (i + 1) % (slices_count);
             indices[ii++] = i;
