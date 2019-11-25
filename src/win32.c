@@ -120,6 +120,11 @@ char* win32_load_text_file(const char* filename)
     return buf;
 }
 
+void win32_print(const char* str)
+{
+    OutputDebugStringA(str);
+}
+
 static void* win32_gl_get_proc(const char* name)
 {
     if (!g_opengl)

@@ -5,7 +5,8 @@
 
 #include <assert.h>
 #define ASSERT(exp) assert(exp)
-#define PRINT(msg)
+#define PRINT(format, ...) d_print(format, __VA_ARGS__)
+#define PRINTLN(format, ...) d_print(format "\n", __VA_ARGS__)
 
 #else
 
@@ -13,5 +14,11 @@
 #define PRINT(msg)
 
 #endif
+
+#define PRINT_FN_SIG(name) void name(const char* str)
+typedef PRINT_FN_SIG(PrintFn);
+
+void d_print(const char* format, ...);
+void d_set_print_callback(PrintFn* callback);
 
 #endif // DEBUG_H

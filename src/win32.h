@@ -29,10 +29,9 @@ bool win32_app_init(Win32App* app,
                     int gl_major_version,
                     int gl_minor_version);
 void win32_app_cleanup(Win32App* app);
-
 IVec2 win32_get_window_size(HWND window);
 float win32_get_window_aspect_ratio(HWND window);
-
 char* win32_load_text_file(const char* filename);
+void win32_print(const char* str);
 
 #endif // WIN32_H
