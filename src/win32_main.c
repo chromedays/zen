@@ -71,7 +71,7 @@ int CALLBACK WinMain(HINSTANCE instance,
                      int cmd)
 {
     Win32App app = {0};
-    ASSERT(win32_app_init(&app, instance, "Zen", 1280, 720, 32, 24, 8, 3, 3));
+    ASSERT(win32_app_init(&app, instance, "Zen", 1280, 720, 32, 24, 8, 4, 6));
 
     Mesh sp_mesh = rc_mesh_make_sphere(2, 64, 64);
     VertexBuffer sp_vb = {0};
