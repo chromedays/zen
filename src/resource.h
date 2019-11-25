@@ -26,6 +26,8 @@ GLuint rc_shader_load_from_source(const char* vs_src,
                                   const char** includes,
                                   int includes_count);
 
+void rc_mesh_cleanup(Mesh* mesh);
 Mesh rc_mesh_load_from_gltf(const char* filename);
+Mesh rc_mesh_make_sphere();
 
 #endif // RESOURCE_H
