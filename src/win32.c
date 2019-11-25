@@ -1,8 +1,10 @@
 #include "win32.h"
-#include <glad/glad_wgl.h>
-#include <himath.h>
 #include "primitive.h"
 #include "debug.h"
+#include <glad/glad_wgl.h>
+#include <himath.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 static HMODULE g_opengl;
 
@@ -84,6 +86,38 @@ void win32_app_cleanup(Win32App* app)
 {
     DestroyWindow(app->window);
     UnregisterClass(WIN32_CLASS_NAME, app->instance);
+}
+
+IVec2 win32_get_window_size(HWND window)
+{
+    RECT cr;
+    GetClientRect(window, &cr);
+    IVec2 result = {cr.right - cr.left, cr.bottom - cr.top};
+    return result;
+}
+
+float win32_get_window_aspect_ratio(HWND window)
+{
+    IVec2 ws = win32_get_window_size(window);
+    float result = (float)ws.x / (float)ws.y;
+    return result;
+}
+
+char* win32_load_text_file(const char* filename)
+{
+    FILE* f = fopen(filename, "r");
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    rewind(f);
+
+    char* buf = (char*)malloc(size + 1);
+    ASSERT(size >= 0);
+    size = (long)fread(buf, 1, (size_t)size, f);
+    buf[size] = '\0';
+    fclose(f);
+
+    return buf;
 }
 
 static void* win32_gl_get_proc(const char* name)

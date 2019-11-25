@@ -1,6 +1,7 @@
 #ifndef WIN32_H
 #define WIN32_H
 #include "primitive.h"
+#include "himath.h"
 #include <glad/glad_wgl.h>
 
 typedef struct Win32App_
@@ -28,5 +29,10 @@ bool win32_app_init(Win32App* app,
                     int gl_major_version,
                     int gl_minor_version);
 void win32_app_cleanup(Win32App* app);
+
+IVec2 win32_get_window_size(HWND window);
+float win32_get_window_aspect_ratio(HWND window);
+
+char* win32_load_text_file(const char* filename);
 
 #endif // WIN32_H
