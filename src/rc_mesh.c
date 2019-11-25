@@ -13,6 +13,17 @@ void rc_mesh_cleanup(Mesh* mesh)
         free(mesh->indices);
 }
 
+Mesh rc_mesh_make_raw(int vertices_count, int indices_count)
+{
+    Mesh result = {0};
+    result.vertices =
+        (Vertex*)malloc(vertices_count * sizeof(*result.vertices));
+    result.vertices_count = vertices_count;
+    result.indices = (uint*)malloc(indices_count * sizeof(*result.indices));
+    result.indices_count = indices_count;
+    return result;
+}
+
 // TODO:
 bool rc_mesh_load_from_obj(Mesh* mesh, const char* filename)
 {

@@ -4,10 +4,11 @@
 
 static GLuint
     rc_shader_compile(GLenum type, const char** sources, int sources_count);
-static GLuint rc_shader_combine(GLuint vs, GLuint fs);
+static GLuint rc_shader_link(GLuint* shaders, int shaders_count);
 
 GLuint rc_shader_load_from_source(const char* vs_src,
                                   const char* fs_src,
+                                  const char* cs_src,
                                   const char** includes,
                                   int includes_count)
 {
@@ -18,24 +19,35 @@ GLuint rc_shader_load_from_source(const char* vs_src,
         (const char**)malloc(sources_count * sizeof(const char*));
     memcpy((void*)sources, (void*)includes,
            includes_count * sizeof(const char*));
-    sources[includes_count] = vs_src;
 
-    GLuint vs = rc_shader_compile(GL_VERTEX_SHADER, sources, sources_count);
-    if (vs)
+    int shaders_count = 0;
+    GLuint shaders[3] = {0};
+
+    if (vs_src)
+    {
+        sources[includes_count] = vs_src;
+        shaders[shaders_count++] =
+            rc_shader_compile(GL_VERTEX_SHADER, sources, sources_count);
+    }
+    if (fs_src)
     {
         sources[includes_count] = fs_src;
-        GLuint fs =
+        shaders[shaders_count++] =
             rc_shader_compile(GL_FRAGMENT_SHADER, sources, sources_count);
-        if (fs)
-        {
-            result = rc_shader_combine(vs, fs);
-            glDeleteShader(vs);
-            glDeleteShader(fs);
-        }
-        else
-        {
-            glDeleteShader(vs);
-        }
+    }
+    if (cs_src)
+    {
+        sources[includes_count] = cs_src;
+        shaders[shaders_count++] =
+            rc_shader_compile(GL_COMPUTE_SHADER, sources, sources_count);
+    }
+
+    if (shaders_count > 0)
+    {
+        result = rc_shader_link(shaders, shaders_count);
+
+        for (int i = 0; i < shaders_count; ++i)
+            glDeleteShader(shaders[i]);
     }
 
     free((void*)sources);
@@ -78,17 +90,19 @@ static GLuint
     return result;
 }
 
-static GLuint rc_shader_combine(GLuint vs, GLuint fs)
+static GLuint rc_shader_link(GLuint* shaders, int shaders_count)
 {
     GLuint result = 0;
 
     GLuint program = glCreateProgram();
-    glAttachShader(program, vs);
-    glAttachShader(program, fs);
+
+    for (int i = 0; i < shaders_count; ++i)
+        glAttachShader(program, shaders[i]);
+
     glLinkProgram(program);
 
-    glDetachShader(program, vs);
-    glDetachShader(program, fs);
+    for (int i = 0; i < shaders_count; ++i)
+        glDetachShader(program, shaders[i]);
 
     GLint link_result;
     glGetProgramiv(program, GL_LINK_STATUS, &link_result);

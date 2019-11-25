@@ -70,6 +70,8 @@ int CALLBACK WinMain(HINSTANCE instance,
                      LPSTR cmdstr,
                      int cmd)
 {
+    d_set_print_callback(&win32_print);
+
     Win32App app = {0};
     ASSERT(win32_app_init(&app, instance, "Zen", 1280, 720, 32, 24, 8, 4, 6));
 
@@ -81,9 +83,9 @@ int CALLBACK WinMain(HINSTANCE instance,
     char* vs_src = win32_load_text_file("shaders/unlit.vert");
     char* fs_src = win32_load_text_file("shaders/unlit.frag");
 
-    GLuint unlit = rc_shader_load_from_source(vs_src, fs_src, &shared_src, 1);
+    GLuint unlit =
+        rc_shader_load_from_source(vs_src, fs_src, NULL, &shared_src, 1);
 
-    free(shared_src);
     free(vs_src);
     free(fs_src);
 
@@ -110,6 +112,84 @@ int CALLBACK WinMain(HINSTANCE instance,
     glUniformBlockBinding(unlit, glGetUniformBlockIndex(unlit, "PerObject"), 1);
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, per_object_ubo);
 
+    GLuint fsq_shader = 0;
+    GLuint path_tracer = 0;
+    IVec2 tex_size = win32_get_window_size(app.window);
+    GLuint tex;
+    {
+        glGenTextures(1, &tex);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, tex_size.x, tex_size.y, 0,
+                     GL_RGBA, GL_FLOAT, NULL);
+        glBindImageTexture(0, tex, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+        int work_group_counts[3] = {0};
+        glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0,
+                        &work_group_counts[0]);
+        glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1,
+                        &work_group_counts[1]);
+        glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2,
+                        &work_group_counts[2]);
+        PRINTLN("Max global work group sizes: (%d,%d,%d)", work_group_counts[0],
+                work_group_counts[1], work_group_counts[2]);
+        int work_group_sizes[3] = {0};
+        glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 0,
+                        &work_group_sizes[0]);
+        glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 1,
+                        &work_group_sizes[1]);
+        glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 2,
+                        &work_group_sizes[2]);
+        PRINTLN("Max local work group sizes: (%d,%d,%d)", work_group_sizes[0],
+                work_group_sizes[1], work_group_sizes[2]);
+        int max_work_group_invocations = 0;
+        glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS,
+                      &max_work_group_invocations);
+        PRINTLN("Max local work group invocations: %d",
+                max_work_group_invocations);
+
+        char* path_tracer_src =
+            win32_load_text_file("shaders/path_tracer.comp");
+        path_tracer =
+            rc_shader_load_from_source(NULL, NULL, path_tracer_src, NULL, 0);
+        free(path_tracer_src);
+
+        {
+            char* fsq_src[2] = {
+                win32_load_text_file("shaders/fsq.vert"),
+                win32_load_text_file("shaders/fsq.frag"),
+            };
+
+            fsq_shader = rc_shader_load_from_source(fsq_src[0], fsq_src[1],
+                                                    NULL, &shared_src, 1);
+
+            for (int i = 0; i < 2; ++i)
+                free(fsq_src[i]);
+        }
+    }
+    free(shared_src);
+
+    Mesh fsq_mesh = rc_mesh_make_raw(4, 6);
+    {
+        Vertex vertices[] = {
+            {{1, 1}, {1, 1}, {0}},
+            {{-1, 1}, {0, 1}, {0}},
+            {{-1, -1}, {0, 0}, {0}},
+            {{1, -1}, {1, 0}, {0}},
+        };
+        uint indices[] = {
+            2, 3, 0, 0, 1, 2,
+        };
+        memcpy(fsq_mesh.vertices, vertices, sizeof(vertices));
+        memcpy(fsq_mesh.indices, indices, sizeof(indices));
+    }
+    VertexBuffer fsq_vb = {0};
+    vb_init(&fsq_vb, &fsq_mesh, GL_TRIANGLES);
+
     g_win32_state.running = true;
 
     while (g_win32_state.running)
@@ -134,6 +214,11 @@ int CALLBACK WinMain(HINSTANCE instance,
             IVec2 ws = win32_get_window_size(app.window);
             glViewport(0, 0, ws.x, ws.y);
         }
+
+        glUseProgram(path_tracer);
+        glDispatchCompute((GLuint)tex_size.x, (GLuint)tex_size.y, 1);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glClearColor(0.3f, 0.3f, 0.5f, 1.0f);
         glEnable(GL_DEPTH_TEST);
@@ -147,11 +232,17 @@ int CALLBACK WinMain(HINSTANCE instance,
         glBindBuffer(GL_UNIFORM_BUFFER, per_object_ubo);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(per_object), &per_object);
 
-        glUseProgram(unlit);
-
         glDisable(GL_CULL_FACE);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glUseProgram(unlit);
         vb_draw(&sp_vb);
+
+        glEnable(GL_CULL_FACE);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glUseProgram(fsq_shader);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        vb_draw(&fsq_vb);
 
         SwapBuffers(app.dc);
     }

@@ -7,6 +7,7 @@
 
 GLuint rc_shader_load_from_source(const char* vs_src,
                                   const char* fs_src,
+                                  const char* cs_src,
                                   const char** includes,
                                   int includes_count);
 
@@ -27,6 +28,7 @@ typedef struct Mesh_
 } Mesh;
 
 void rc_mesh_cleanup(Mesh* mesh);
+Mesh rc_mesh_make_raw(int vertices_count, int indices_count);
 // Mesh rc_mesh_load_from_gltf(const char* filename);
 Mesh rc_mesh_make_sphere(float radius, int slices_count, int stacks_count);
 
