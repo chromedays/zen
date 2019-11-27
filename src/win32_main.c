@@ -1,18 +1,15 @@
 #include "win32.h"
 #include "debug.h"
 #include "resource.h"
+#include "renderer.h"
 #include "himath.h"
+#include <math.h>
 #include <stdlib.h>
-#include <stdint.h>
 
 typedef struct Win32GlobalState_
 {
     bool running;
 } Win32GlobalState;
-
-#define UNIFORM_PADXX(x) uint32_t __pad__##x
-#define UNIFORM_PADX(x) UNIFORM_PADXX(x)
-#define UNIFORM_PAD UNIFORM_PADX(__LINE__)
 
 typedef struct LightUniform_
 {
@@ -113,9 +110,18 @@ int CALLBACK WinMain(HINSTANCE instance,
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, per_object_ubo);
 
     GLuint fsq_shader = 0;
-    GLuint path_tracer = 0;
+    GLuint ray_tracer = 0;
     IVec2 tex_size = win32_get_window_size(app.window);
     GLuint tex;
+    RayTracerGlobalUniform ray_tracer_global = {
+        .view = {.eye = {0, 0, 0},
+                 .look = fvec3_normalize((FVec3){0, 0, -1}),
+                 .dims = {10 * win32_get_window_aspect_ratio(app.window), 10},
+                 .dist = 5},
+        .spheres = {{.c = {0, 0, 0}, .r = 5}},
+        .spheres_count = 1,
+    };
+    GLuint ray_tracer_global_ubo;
     {
         glGenTextures(1, &tex);
         glActiveTexture(GL_TEXTURE0);
@@ -152,11 +158,10 @@ int CALLBACK WinMain(HINSTANCE instance,
         PRINTLN("Max local work group invocations: %d",
                 max_work_group_invocations);
 
-        char* path_tracer_src =
-            win32_load_text_file("shaders/path_tracer.comp");
-        path_tracer =
-            rc_shader_load_from_source(NULL, NULL, path_tracer_src, NULL, 0);
-        free(path_tracer_src);
+        char* ray_tracer_src = win32_load_text_file("shaders/ray_tracer.comp");
+        ray_tracer =
+            rc_shader_load_from_source(NULL, NULL, ray_tracer_src, NULL, 0);
+        free(ray_tracer_src);
 
         {
             char* fsq_src[2] = {
@@ -170,6 +175,17 @@ int CALLBACK WinMain(HINSTANCE instance,
             for (int i = 0; i < 2; ++i)
                 free(fsq_src[i]);
         }
+
+        glGenBuffers(1, &ray_tracer_global_ubo);
+        glBindBuffer(GL_UNIFORM_BUFFER, ray_tracer_global_ubo);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(RayTracerGlobalUniform),
+                     &ray_tracer_global, GL_DYNAMIC_DRAW);
+        glUseProgram(ray_tracer);
+        glUniformBlockBinding(ray_tracer,
+                              glGetUniformBlockIndex(ray_tracer, "Global"), 0);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, ray_tracer_global_ubo);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        glUseProgram(0);
     }
     free(shared_src);
 
@@ -192,8 +208,22 @@ int CALLBACK WinMain(HINSTANCE instance,
 
     g_win32_state.running = true;
 
+    float t = 0;
+    float orbit_deg_per_sec = 45;
+
+    LARGE_INTEGER freq;
+    QueryPerformanceFrequency(&freq);
+    LARGE_INTEGER last_counter;
+    QueryPerformanceCounter(&last_counter);
+
     while (g_win32_state.running)
     {
+        LARGE_INTEGER curr_counter;
+        QueryPerformanceCounter(&curr_counter);
+        float dt = (float)(curr_counter.QuadPart - last_counter.QuadPart) /
+                   (float)freq.QuadPart;
+        last_counter = curr_counter;
+
         MSG msg = {0};
         while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
         {
@@ -215,7 +245,19 @@ int CALLBACK WinMain(HINSTANCE instance,
             glViewport(0, 0, ws.x, ws.y);
         }
 
-        glUseProgram(path_tracer);
+        t += dt;
+        ray_tracer_global.view.eye.x =
+            cosf(degtorad(t * orbit_deg_per_sec)) * 10;
+        ray_tracer_global.view.eye.z =
+            sinf(degtorad(t * orbit_deg_per_sec)) * 10;
+        ray_tracer_global.view.look =
+            fvec3_normalize(fvec3_mulf(ray_tracer_global.view.eye, -1));
+        glBindBuffer(GL_UNIFORM_BUFFER, ray_tracer_global_ubo);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(ray_tracer_global),
+                        &ray_tracer_global);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        glUseProgram(ray_tracer);
         glDispatchCompute((GLuint)tex_size.x, (GLuint)tex_size.y, 1);
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 

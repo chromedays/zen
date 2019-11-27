@@ -56,7 +56,9 @@ bool win32_app_init(Win32App* app,
                       .lpszClassName = WIN32_CLASS_NAME};
     if (RegisterClassExA(&wc))
     {
-        DWORD window_style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+        DWORD window_style =
+            ((WS_OVERLAPPEDWINDOW | WS_VISIBLE) ^ WS_THICKFRAME) ^
+            WS_MAXIMIZEBOX;
         RECT window_rect = {
             .left = 0, .top = 0, .right = width, .bottom = height};
         AdjustWindowRectEx(&window_rect, window_style, 0, 0);
