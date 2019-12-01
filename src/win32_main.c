@@ -80,7 +80,7 @@ SCENE_INIT_FN_SIG(unlit_scene_init)
 {
     UnlitScene* scene = (UnlitScene*)calloc(1, sizeof(*scene));
     scene->sp_mesh = rc_mesh_make_sphere(2, 64, 64);
-    rc_vb_init(&scene->sp_vb, &scene->sp_mesh, GL_TRIANGLES);
+    r_vb_init(&scene->sp_vb, &scene->sp_mesh, GL_TRIANGLES);
 
     char* shared_src = win32_load_text_file("shaders/shared.glsl");
     char* vs_src = win32_load_text_file("shaders/unlit.vert");
@@ -123,7 +123,7 @@ SCENE_CLEANUP_FN_SIG(unlit_scene_cleanup)
 {
     UnlitScene* scene = (UnlitScene*)udata;
     rc_mesh_cleanup(&scene->sp_mesh);
-    rc_vb_cleanup(&scene->sp_vb);
+    r_vb_cleanup(&scene->sp_vb);
     glDeleteProgram(scene->unlit);
     glDeleteBuffers(1, &scene->per_frame_ubo);
     glDeleteBuffers(1, &scene->per_object_ubo);
@@ -154,7 +154,7 @@ SCENE_UPDATE_FN_SIG(unlit_scene_update)
     glDisable(GL_CULL_FACE);
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     glUseProgram(scene->unlit);
-    rc_vb_draw(&scene->sp_vb);
+    r_vb_draw(&scene->sp_vb);
 }
 
 typedef struct RayTracerScene_
@@ -191,7 +191,7 @@ SCENE_INIT_FN_SIG(raytracer_scene_init)
         memcpy(scene->fsq_mesh.indices, indices, sizeof(indices));
     }
 
-    rc_vb_init(&scene->fsq_vb, &scene->fsq_mesh, GL_TRIANGLES);
+    r_vb_init(&scene->fsq_vb, &scene->fsq_mesh, GL_TRIANGLES);
 
     char* shared_src = win32_load_text_file("shaders/shared.glsl");
     char* fsq_src[2] = {
@@ -259,7 +259,7 @@ SCENE_CLEANUP_FN_SIG(raytracer_scene_cleanup)
     RayTracerScene* scene = (RayTracerScene*)udata;
 
     rc_mesh_cleanup(&scene->fsq_mesh);
-    rc_vb_cleanup(&scene->fsq_vb);
+    r_vb_cleanup(&scene->fsq_vb);
     glDeleteProgram(scene->fsq);
     glDeleteTextures(1, &scene->fsq_tex);
 
@@ -300,7 +300,7 @@ SCENE_UPDATE_FN_SIG(raytracer_scene_update)
     glUseProgram(scene->fsq);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, scene->fsq_tex);
-    rc_vb_draw(&scene->fsq_vb);
+    r_vb_draw(&scene->fsq_vb);
 }
 
 int CALLBACK WinMain(HINSTANCE instance,

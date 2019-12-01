@@ -2,7 +2,7 @@
 #define RESOURCE_H
 
 #include "primitive.h"
-#include <glad/glad_wgl.h>
+#include <glad/glad.h>
 #include <himath.h>
 
 GLuint rc_shader_load_from_source(const char* vs_src,
@@ -31,19 +31,5 @@ void rc_mesh_cleanup(Mesh* mesh);
 Mesh rc_mesh_make_raw(int vertices_count, int indices_count);
 // Mesh rc_mesh_load_from_gltf(const char* filename);
 Mesh rc_mesh_make_sphere(float radius, int slices_count, int stacks_count);
-
-typedef struct VertexBuffer_
-{
-    GLuint vao;
-    GLuint vbo;
-    GLuint ebo;
-    GLuint count; // vertex or index count
-    GLuint mode;
-} VertexBuffer;
-
-void rc_vb_init(VertexBuffer* vb, const Mesh* mesh, GLenum mode);
-void rc_vb_cleanup(VertexBuffer* vb);
-// TODO: Maybe need to belong to renderer rather than resource?
-void rc_vb_draw(const VertexBuffer* vb);
 
 #endif // RESOURCE_H

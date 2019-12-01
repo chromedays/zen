@@ -1,7 +1,10 @@
 #ifndef RENDERER_H
 #define RENDERER_H
-#include <stdint.h>
 #include <himath.h>
+#include <glad/glad.h>
+#include <stdint.h>
+
+typedef struct Mesh_ Mesh;
 
 #define UNIFORM_PADXX(x) uint32_t __pad__##x
 #define UNIFORM_PADX(x) UNIFORM_PADXX(x)
@@ -30,5 +33,19 @@ typedef struct RayTracerGlobalUniform_
     RayTracerSphere spheres[100];
     int spheres_count;
 } RayTracerGlobalUniform;
+
+typedef struct VertexBuffer_
+{
+    GLuint vao;
+    GLuint vbo;
+    GLuint ebo;
+    GLuint count; // vertex or index count
+    GLuint mode;
+} VertexBuffer;
+
+void r_vb_init(VertexBuffer* vb, const Mesh* mesh, GLenum mode);
+void r_vb_cleanup(VertexBuffer* vb);
+// TODO: Maybe need to belong to renderer rather than resource?
+void r_vb_draw(const VertexBuffer* vb);
 
 #endif // RENDERER_H

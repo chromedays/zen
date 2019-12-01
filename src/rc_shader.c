@@ -1,6 +1,7 @@
 #include "resource.h"
 #include "debug.h"
 #include <stdlib.h>
+#include <string.h>
 
 static GLuint
     rc_shader_compile(GLenum type, const char** sources, int sources_count);
