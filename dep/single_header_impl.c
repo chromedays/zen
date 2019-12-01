@@ -11,3 +11,9 @@
 #include <cgltf.h>
 #define TINYOBJ_LOADER_C_IMPLEMENTATION
 #include <tinyobj_loader_c.h>
+#pragma warning(push)
+#pragma warning(disable : 4127)
+#pragma warning(disable : 4701)
+#define NK_IMPLEMENTATION
+#include <nuklear.h>
+#pragma warning(pop)
