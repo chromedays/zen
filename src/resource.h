@@ -41,8 +41,9 @@ typedef struct VertexBuffer_
     GLuint mode;
 } VertexBuffer;
 
-void vb_init(VertexBuffer* vb, const Mesh* mesh, GLenum mode);
-void vb_cleanup(VertexBuffer* vb);
-void vb_draw(const VertexBuffer* vb);
+void rc_vb_init(VertexBuffer* vb, const Mesh* mesh, GLenum mode);
+void rc_vb_cleanup(VertexBuffer* vb);
+// TODO: Maybe need to belong to renderer rather than resource?
+void rc_vb_draw(const VertexBuffer* vb);
 
 #endif // RESOURCE_H

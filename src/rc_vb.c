@@ -2,7 +2,7 @@
 #include "debug.h"
 #include <stddef.h>
 
-void vb_init(VertexBuffer* vb, const Mesh* mesh, GLenum mode)
+void rc_vb_init(VertexBuffer* vb, const Mesh* mesh, GLenum mode)
 {
     ASSERT(mesh->vertices);
     glGenVertexArrays(1, &vb->vao);
@@ -41,7 +41,7 @@ void vb_init(VertexBuffer* vb, const Mesh* mesh, GLenum mode)
     vb->mode = mode;
 }
 
-void vb_cleanup(VertexBuffer* vb)
+void rc_vb_cleanup(VertexBuffer* vb)
 {
     glDeleteVertexArrays(1, &vb->vao);
     glDeleteBuffers(1, &vb->vbo);
@@ -49,7 +49,7 @@ void vb_cleanup(VertexBuffer* vb)
         glDeleteBuffers(1, &vb->ebo);
 }
 
-void vb_draw(const VertexBuffer* vb)
+void rc_vb_draw(const VertexBuffer* vb)
 {
     glBindVertexArray(vb->vao);
     if (vb->ebo != 0)
