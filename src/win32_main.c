@@ -118,8 +118,12 @@ int CALLBACK WinMain(HINSTANCE instance,
                  .look = fvec3_normalize((FVec3){0, 0, -1}),
                  .dims = {10 * win32_get_window_aspect_ratio(app.window), 10},
                  .dist = 5},
-        .spheres = {{.c = {0, 0, 0}, .r = 5}},
-        .spheres_count = 1,
+        .spheres =
+            {
+                {.c = {0, 0, 0}, .r = 5},
+                {.c = {0, -105, 0}, .r = 100},
+            },
+        .spheres_count = 2,
     };
     GLuint ray_tracer_global_ubo;
     {
@@ -129,7 +133,7 @@ int CALLBACK WinMain(HINSTANCE instance,
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, tex_size.x, tex_size.y, 0,
                      GL_RGBA, GL_FLOAT, NULL);
         glBindImageTexture(0, tex, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
@@ -252,13 +256,14 @@ int CALLBACK WinMain(HINSTANCE instance,
             sinf(degtorad(t * orbit_deg_per_sec)) * 10;
         ray_tracer_global.view.look =
             fvec3_normalize(fvec3_mulf(ray_tracer_global.view.eye, -1));
+        ray_tracer_global.spheres[0].c.y = 1 + sinf(t);
         glBindBuffer(GL_UNIFORM_BUFFER, ray_tracer_global_ubo);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(ray_tracer_global),
                         &ray_tracer_global);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
         glUseProgram(ray_tracer);
-        glDispatchCompute((GLuint)tex_size.x, (GLuint)tex_size.y, 1);
+        glDispatchCompute((GLuint)tex_size.x * 2, (GLuint)tex_size.y * 2, 1);
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
