@@ -35,7 +35,7 @@ local function internal_simple_win32_cpp(name, static_libs, clang_format_path, p
 
     project(name .. '_win32')
         kind(proj_kind)
-        language 'C'
+        language 'C++'
         architecture 'x86_64'
         buildoptions '/std:c++latest'
         characterset 'MBCS'
@@ -66,6 +66,7 @@ local function internal_simple_win32_cpp(name, static_libs, clang_format_path, p
         files {
             dep_root .. '**.h',
             dep_root .. '**.c',
+            dep_root .. '**.cpp',
             src_root .. '*.h',
             -- src_root .. '*.hpp',
             src_root .. '*.c',
