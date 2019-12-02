@@ -3,6 +3,8 @@
 #include <himath.h>
 #include <glad/glad.h>
 #include <stdint.h>
+#define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
+#include <cimgui/cimgui.h>
 
 typedef struct Mesh_ Mesh;
 
@@ -47,5 +49,10 @@ void r_vb_init(VertexBuffer* vb, const Mesh* mesh, GLenum mode);
 void r_vb_cleanup(VertexBuffer* vb);
 // TODO: Maybe need to belong to renderer rather than resource?
 void r_vb_draw(const VertexBuffer* vb);
+
+void r_gui_init();
+void r_gui_cleanup();
+void r_gui_new_frame(IVec2 display_size);
+void r_gui_render();
 
 #endif // RENDERER_H

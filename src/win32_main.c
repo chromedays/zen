@@ -273,6 +273,8 @@ SCENE_UPDATE_FN_SIG(raytracer_scene_update)
 {
     RayTracerScene* scene = (RayTracerScene*)udata;
 
+    igText("haha");
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glClearColor(0.3f, 0.3f, 0.5f, 1.0f);
     glViewport(0, 0, app->window_size.x, app->window_size.y);
@@ -330,6 +332,8 @@ int CALLBACK WinMain(HINSTANCE instance,
                   &max_work_group_invocations);
     PRINTLN("Max local work group invocations: %d", max_work_group_invocations);
 
+    r_gui_init();
+
     Scene scene = {0};
     scene.app = (AppContext){
         .window_size = win32_get_window_size(app.window),
@@ -366,6 +370,8 @@ int CALLBACK WinMain(HINSTANCE instance,
             DispatchMessage(&msg);
         }
 
+        r_gui_new_frame(win32_get_window_size(app.window));
+
         scene.app = (AppContext){
             .window_size = win32_get_window_size(app.window),
             .window_aspect_ratio = win32_get_window_aspect_ratio(app.window),
@@ -397,10 +403,14 @@ int CALLBACK WinMain(HINSTANCE instance,
 
         s_update(&scene, dt);
 
+        r_gui_render();
+
         SwapBuffers(app.dc);
     }
 
     s_cleanup(&scene);
+
+    r_gui_cleanup();
 
     win32_app_cleanup(&app);
 
