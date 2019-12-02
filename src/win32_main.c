@@ -3,7 +3,8 @@
 #include "resource.h"
 #include "renderer.h"
 #include "scene.h"
-#include "himath.h"
+#include "app.h"
+#include <himath.h>
 #include <math.h>
 #include <stdlib.h>
 
@@ -133,8 +134,10 @@ SCENE_CLEANUP_FN_SIG(unlit_scene_cleanup)
 SCENE_UPDATE_FN_SIG(unlit_scene_update)
 {
     UnlitScene* scene = (UnlitScene*)udata;
-    scene->per_frame.proj = mat4_persp(60, app->window_aspect_ratio, 0.1f, 100);
-    glViewport(0, 0, app->window_size.x, app->window_size.y);
+    scene->per_frame.proj = mat4_persp(
+        60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
+        100);
+    glViewport(0, 0, input->window_size.x, input->window_size.y);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glClearColor(0.3f, 0.3f, 0.5f, 1.0f);
@@ -214,8 +217,8 @@ SCENE_INIT_FN_SIG(raytracer_scene_init)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, app->window_size.x,
-                 app->window_size.y, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, input->window_size.x,
+                 input->window_size.y, 0, GL_RGBA, GL_FLOAT, NULL);
     glBindImageTexture(0, scene->fsq_tex, 0, GL_FALSE, 0, GL_WRITE_ONLY,
                        GL_RGBA32F);
 
@@ -227,7 +230,9 @@ SCENE_INIT_FN_SIG(raytracer_scene_init)
     scene->ray_tracer_global = (RayTracerGlobalUniform){
         .view = {.eye = {0, 0, 0},
                  .look = fvec3_normalize((FVec3){0, 0, -1}),
-                 .dims = {10 * app->window_aspect_ratio, 10},
+                 .dims = {10 * ((float)input->window_size.x /
+                                (float)input->window_size.y),
+                          10},
                  .dist = 5},
         .spheres =
             {
@@ -277,9 +282,9 @@ SCENE_UPDATE_FN_SIG(raytracer_scene_update)
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glClearColor(0.3f, 0.3f, 0.5f, 1.0f);
-    glViewport(0, 0, app->window_size.x, app->window_size.y);
+    glViewport(0, 0, input->window_size.x, input->window_size.y);
 
-    scene->t += dt;
+    scene->t += input->dt;
     scene->ray_tracer_global.view.eye.x =
         cosf(degtorad(scene->t * scene->orbit_deg_per_sec)) * 10;
     scene->ray_tracer_global.view.eye.z =
@@ -293,8 +298,8 @@ SCENE_UPDATE_FN_SIG(raytracer_scene_update)
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
     glUseProgram(scene->ray_tracer);
-    glDispatchCompute((GLuint)app->window_size.x, (GLuint)app->window_size.y,
-                      1);
+    glDispatchCompute((GLuint)input->window_size.x,
+                      (GLuint)input->window_size.y, 1);
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
     glEnable(GL_CULL_FACE);
@@ -334,11 +339,11 @@ int CALLBACK WinMain(HINSTANCE instance,
 
     r_gui_init();
 
+    Input input = {0};
+    win32_register_input(&input);
+
     Scene scene = {0};
-    scene.app = (AppContext){
-        .window_size = win32_get_window_size(app.window),
-        .window_aspect_ratio = win32_get_window_aspect_ratio(app.window),
-    };
+    s_init(&scene, &input);
     s_switch_scene(&scene, (SceneCallbacks){.init = unlit_scene_init,
                                             .cleanup = unlit_scene_cleanup,
                                             .update = unlit_scene_update});
@@ -353,7 +358,7 @@ int CALLBACK WinMain(HINSTANCE instance,
     {
         LARGE_INTEGER curr_counter;
         QueryPerformanceCounter(&curr_counter);
-        float dt = (float)(curr_counter.QuadPart - last_counter.QuadPart) /
+        input.dt = (float)(curr_counter.QuadPart - last_counter.QuadPart) /
                    (float)freq.QuadPart;
         last_counter = curr_counter;
 
@@ -370,38 +375,11 @@ int CALLBACK WinMain(HINSTANCE instance,
             DispatchMessage(&msg);
         }
 
-        r_gui_new_frame(win32_get_window_size(app.window));
+        win32_update_input(&app);
 
-        scene.app = (AppContext){
-            .window_size = win32_get_window_size(app.window),
-            .window_aspect_ratio = win32_get_window_aspect_ratio(app.window),
-        };
+        r_gui_new_frame(&input);
 
-        static float t;
-        static bool flag;
-        t += dt;
-        if (t >= 2)
-        {
-            if (flag)
-            {
-                s_switch_scene(
-                    &scene, (SceneCallbacks){.init = raytracer_scene_init,
-                                             .cleanup = raytracer_scene_cleanup,
-                                             .update = raytracer_scene_update});
-            }
-            else
-            {
-                s_switch_scene(&scene,
-                               (SceneCallbacks){.init = unlit_scene_init,
-                                                .cleanup = unlit_scene_cleanup,
-                                                .update = unlit_scene_update});
-            }
-
-            flag = !flag;
-            t = 0;
-        }
-
-        s_update(&scene, dt);
+        s_update(&scene);
 
         r_gui_render();
 

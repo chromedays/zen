@@ -1,12 +1,17 @@
 #include "win32.h"
+#include "app.h"
 #include "primitive.h"
 #include "debug.h"
+#include "util.h"
 #include <glad/glad_wgl.h>
 #include <himath.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+// TODO: abstract input handling code
+
 static HMODULE g_opengl;
+static Input* g_input;
 
 #define WIN32_MENU_NAME "Zen Win32 Menu"
 #define WIN32_CLASS_NAME "Zen Win32 Class"
@@ -28,6 +33,26 @@ LRESULT CALLBACK win32_message_callback(HWND window,
 
     switch (msg)
     {
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDBLCLK: g_input->mouse_down[0] = true; break;
+    case WM_LBUTTONUP: g_input->mouse_down[0] = false; break;
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONDBLCLK: g_input->mouse_down[1] = true; break;
+    case WM_RBUTTONUP: g_input->mouse_down[1] = false; break;
+    case WM_MBUTTONDOWN:
+    case WM_MBUTTONDBLCLK: g_input->mouse_down[2] = true; break;
+    case WM_MBUTTONUP: g_input->mouse_down[2] = false; break;
+
+    case WM_SYSKEYDOWN:
+    case WM_KEYDOWN:
+        if (g_input && wp < ARRAY_LENGTH(g_input->key_down))
+            g_input->key_down[wp] = true;
+        break;
+    case WM_SYSKEYUP:
+    case WM_KEYUP:
+        if (g_input && wp < ARRAY_LENGTH(g_input->key_down))
+            g_input->key_down[wp] = false;
+        break;
     case WM_CLOSE: PostQuitMessage(0); break;
     default: result = DefWindowProcA(window, msg, wp, lp);
     }
@@ -125,6 +150,34 @@ char* win32_load_text_file(const char* filename)
 void win32_print(const char* str)
 {
     OutputDebugStringA(str);
+}
+
+void win32_register_input(Input* input)
+{
+    g_input = input;
+    g_input->key_map[Key_W] = 'W';
+    g_input->key_map[Key_A] = 'A';
+    g_input->key_map[Key_S] = 'S';
+    g_input->key_map[Key_D] = 'D';
+}
+
+void win32_update_input(const Win32App* app)
+{
+    if (!g_input)
+        return;
+    Input* input = g_input;
+
+    POINT mp;
+    GetCursorPos(&mp);
+    ScreenToClient(app->window, &mp);
+    input->mouse_pos.x = mp.x;
+    input->mouse_pos.y = mp.y;
+
+    input->key_ctrl = GetKeyState(VK_CONTROL) & 0x8000;
+    input->key_shift = GetKeyState(VK_SHIFT) & 0x8000;
+    input->key_alt = GetKeyState(VK_MENU) & 0x8000;
+
+    input->window_size = win32_get_window_size(app->window);
 }
 
 static void* win32_gl_get_proc(const char* name)

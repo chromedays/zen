@@ -7,6 +7,7 @@
 #include <cimgui/cimgui.h>
 
 typedef struct Mesh_ Mesh;
+typedef struct Input_ Input;
 
 #define UNIFORM_PADXX(x) uint32_t __pad__##x
 #define UNIFORM_PADX(x) UNIFORM_PADXX(x)
@@ -52,7 +53,7 @@ void r_vb_draw(const VertexBuffer* vb);
 
 void r_gui_init();
 void r_gui_cleanup();
-void r_gui_new_frame(IVec2 display_size);
+void r_gui_new_frame(const Input* input);
 void r_gui_render();
 
 #endif // RENDERER_H
