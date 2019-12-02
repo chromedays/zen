@@ -48,7 +48,6 @@ typedef struct VertexBuffer_
 
 void r_vb_init(VertexBuffer* vb, const Mesh* mesh, GLenum mode);
 void r_vb_cleanup(VertexBuffer* vb);
-// TODO: Maybe need to belong to renderer rather than resource?
 void r_vb_draw(const VertexBuffer* vb);
 
 void r_gui_init();
