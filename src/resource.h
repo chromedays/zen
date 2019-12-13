@@ -5,6 +5,11 @@
 #include <glad/glad.h>
 #include <himath.h>
 
+GLuint rc_shader_load_from_files(const char* vs_filename,
+                                 const char* fs_filename,
+                                 const char* cs_filename,
+                                 const char** include_filename,
+                                 int includes_count);
 GLuint rc_shader_load_from_source(const char* vs_src,
                                   const char* fs_src,
                                   const char* cs_src,

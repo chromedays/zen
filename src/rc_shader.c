@@ -2,10 +2,71 @@
 #include "debug.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+
+char* rc_read_text_file_all(const char* filename)
+{
+    char* result = NULL;
+
+    if (filename)
+    {
+        FILE* f = fopen(filename, "r");
+        if (f)
+        {
+            fseek(f, 0, SEEK_END);
+            long size = ftell(f);
+            rewind(f);
+
+            char* buf = (char*)malloc(size + 1);
+            ASSERT(size >= 0);
+            size = (long)fread(buf, 1, (size_t)size, f);
+            buf[size] = '\0';
+            fclose(f);
+
+            result = buf;
+        }
+    }
+
+    return result;
+}
 
 static GLuint
     rc_shader_compile(GLenum type, const char** sources, int sources_count);
 static GLuint rc_shader_link(GLuint* shaders, int shaders_count);
+
+GLuint rc_shader_load_from_files(const char* vs_filename,
+                                 const char* fs_filename,
+                                 const char* cs_filename,
+                                 const char** include_filenames,
+                                 int includes_count)
+{
+    char* vs_src = rc_read_text_file_all(vs_filename);
+    char* fs_src = rc_read_text_file_all(fs_filename);
+    char* cs_src = rc_read_text_file_all(cs_filename);
+    char** includes = malloc(includes_count * sizeof(const char*));
+
+    for (int i = 0; i < includes_count; i++)
+        includes[i] = rc_read_text_file_all(include_filenames[i]);
+
+    GLuint result = rc_shader_load_from_source(vs_src, fs_src, cs_src, includes,
+                                               includes_count);
+
+    if (vs_src)
+        free(vs_src);
+    if (fs_src)
+        free(fs_src);
+    if (cs_src)
+        free(cs_src);
+    for (int i = 0; i < includes_count; i++)
+    {
+        if (includes[i])
+            free(includes[i]);
+    }
+
+    free(includes);
+
+    return result;
+}
 
 GLuint rc_shader_load_from_source(const char* vs_src,
                                   const char* fs_src,
