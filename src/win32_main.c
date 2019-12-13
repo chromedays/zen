@@ -8,6 +8,13 @@
 #include <math.h>
 #include <stdlib.h>
 
+#define SCENE_DECL(scene_name)                                                 \
+    SCENE_INIT_FN_SIG(scene_name##_init);                                      \
+    SCENE_CLEANUP_FN_SIG(scene_name##_cleanup);                                \
+    SCENE_UPDATE_FN_SIG(scene_name##_update)
+
+SCENE_DECL(hello_triangle);
+
 typedef struct Win32GlobalState_
 {
     bool running;
@@ -344,9 +351,9 @@ int CALLBACK WinMain(HINSTANCE instance,
 
     Scene scene = {0};
     s_init(&scene, &input);
-    s_switch_scene(&scene, (SceneCallbacks){.init = unlit_scene_init,
-                                            .cleanup = unlit_scene_cleanup,
-                                            .update = unlit_scene_update});
+    s_switch_scene(&scene, (SceneCallbacks){.init = hello_triangle_init,
+                                            .cleanup = hello_triangle_cleanup,
+                                            .update = hello_triangle_update});
 
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
