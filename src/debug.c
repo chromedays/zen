@@ -4,7 +4,7 @@
 
 static PRINT_FN_SIG(d_default_print_callback);
 
-PrintFn* g_log_fn = &d_default_print_callback;
+static PrintFn* g_log_fn = &d_default_print_callback;
 
 void d_print(const char* format, ...)
 {
