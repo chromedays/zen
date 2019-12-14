@@ -1,9 +1,8 @@
 #include "scene.h"
 #include "resource.h"
+#include "renderer.h"
 #include "debug.h"
 #include "app.h"
-#include <himath.h>
-#include <glad/glad.h>
 #include <stdlib.h>
 #include <math.h>
 
@@ -12,24 +11,24 @@ typedef struct PerFrame_
     Mat4 mvp;
 } PerFrame;
 
-typedef struct HelloMesh_
+typedef struct SimpleLights_
 {
     Mesh mesh;
     VertexBuffer vb;
-    GLuint debug_shader;
+    GLuint gooch_shader;
     GLuint per_frame_ubo;
     float t;
-} HelloMesh;
+} SimpleLights;
 
-SCENE_INIT_FN_SIG(hello_mesh_init)
+SCENE_INIT_FN_SIG(simple_lights_init)
 {
-    HelloMesh* scene = (HelloMesh*)calloc(1, sizeof(*scene));
+    SimpleLights* scene = (SimpleLights*)calloc(1, sizeof(*scene));
 
     ASSERT(rc_mesh_load_from_obj(&scene->mesh, "shared/models/dragon.obj"));
     r_vb_init(&scene->vb, &scene->mesh, GL_TRIANGLES);
 
-    scene->debug_shader = rc_shader_load_from_files(
-        "hello_mesh/debug.vert", "hello_mesh/debug.frag", NULL, NULL, 0);
+    scene->gooch_shader = rc_shader_load_from_files(
+        "simple_lights/gooch.vert", "simple_lights/gooch.frag", NULL, NULL, 0);
 
     glGenBuffers(1, &scene->per_frame_ubo);
     glBindBuffer(GL_UNIFORM_BUFFER, scene->per_frame_ubo);
@@ -40,21 +39,21 @@ SCENE_INIT_FN_SIG(hello_mesh_init)
     return scene;
 }
 
-SCENE_CLEANUP_FN_SIG(hello_mesh_cleanup)
+SCENE_CLEANUP_FN_SIG(simple_lights_cleanup)
 {
-    HelloMesh* scene = (HelloMesh*)udata;
+    SimpleLights* scene = (SimpleLights*)udata;
 
     rc_mesh_cleanup(&scene->mesh);
     r_vb_cleanup(&scene->vb);
-    glDeleteProgram(scene->debug_shader);
+    glDeleteProgram(scene->gooch_shader);
     glDeleteBuffers(1, &scene->per_frame_ubo);
 
     free(scene);
 }
 
-SCENE_UPDATE_FN_SIG(hello_mesh_update)
+SCENE_UPDATE_FN_SIG(simple_lights_update)
 {
-    HelloMesh* scene = (HelloMesh*)udata;
+    SimpleLights* scene = (SimpleLights*)udata;
 
     scene->t += input->dt;
 
@@ -76,6 +75,6 @@ SCENE_UPDATE_FN_SIG(hello_mesh_update)
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
-    glUseProgram(scene->debug_shader);
+    glUseProgram(scene->gooch_shader);
     r_vb_draw(&scene->vb);
 }
