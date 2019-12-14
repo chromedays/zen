@@ -16,7 +16,7 @@ typedef struct HelloMesh_
 {
     Mesh mesh;
     VertexBuffer vb;
-    GLuint gooch_shader;
+    GLuint debug_shader;
     GLuint per_frame_ubo;
     float t;
 } HelloMesh;
@@ -28,8 +28,8 @@ SCENE_INIT_FN_SIG(hello_mesh_init)
     ASSERT(rc_mesh_load_from_obj(&scene->mesh, "shared/models/dragon.obj"));
     r_vb_init(&scene->vb, &scene->mesh, GL_TRIANGLES);
 
-    scene->gooch_shader = rc_shader_load_from_files(
-        "hello_mesh/gooch.vert", "hello_mesh/gooch.frag", NULL, NULL, 0);
+    scene->debug_shader = rc_shader_load_from_files(
+        "hello_mesh/debug.vert", "hello_mesh/debug.frag", NULL, NULL, 0);
 
     glGenBuffers(1, &scene->per_frame_ubo);
     glBindBuffer(GL_UNIFORM_BUFFER, scene->per_frame_ubo);
@@ -46,7 +46,7 @@ SCENE_CLEANUP_FN_SIG(hello_mesh_cleanup)
 
     rc_mesh_cleanup(&scene->mesh);
     r_vb_cleanup(&scene->vb);
-    glDeleteProgram(scene->gooch_shader);
+    glDeleteProgram(scene->debug_shader);
 
     free(scene);
 }
@@ -75,6 +75,6 @@ SCENE_UPDATE_FN_SIG(hello_mesh_update)
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
-    glUseProgram(scene->gooch_shader);
+    glUseProgram(scene->debug_shader);
     r_vb_draw(&scene->vb);
 }
