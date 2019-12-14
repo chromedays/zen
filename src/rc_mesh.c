@@ -24,60 +24,6 @@ Mesh rc_mesh_make_raw(int vertices_count, int indices_count)
     return result;
 }
 
-// TODO:
-bool rc_mesh_load_from_obj(Mesh* mesh, const char* filename)
-{
-    bool result = false;
-    FILE* f = fopen(filename, "r");
-    if (f)
-    {
-        fseek(f, 0, SEEK_END);
-        size_t fsize = ftell(f);
-        rewind(f);
-        char* data = (char*)malloc((fsize + 1) * sizeof(char));
-        if (data)
-        {
-            fsize = fread(data, sizeof(char), fsize, f);
-            data[fsize] = '\0';
-            fclose(f);
-
-            tinyobj_attrib_t attrib;
-            tinyobj_attrib_init(&attrib);
-            tinyobj_shape_t* shapes = NULL;
-            size_t shapes_count = 0;
-            tinyobj_material_t* materials = NULL;
-            size_t materials_count = 0;
-            int parse_result = tinyobj_parse_obj(
-                &attrib, &shapes, &shapes_count, &materials, &materials_count,
-                data, fsize, TINYOBJ_FLAG_TRIANGULATE);
-            if (parse_result == TINYOBJ_SUCCESS)
-            {
-                int face_offset = 0;
-                for (uint i = 0; i < attrib.num_face_num_verts; ++i)
-                {
-                    ASSERT(attrib.face_num_verts[i] % 3 == 0);
-                    for (int fi = 0; fi < attrib.face_num_verts[i] / 3; ++i)
-                    {
-                        tinyobj_vertex_index_t vi[3] = {
-                            attrib.faces[face_offset + fi * 3],
-                            attrib.faces[face_offset + fi * 3 + 1],
-                            attrib.faces[face_offset + fi * 3 + 2],
-                        };
-                    }
-                }
-                attrib.face_num_verts;
-                tinyobj_materials_free(materials, materials_count);
-                tinyobj_shapes_free(shapes, shapes_count);
-                tinyobj_attrib_free(&attrib);
-            }
-
-            free(data);
-        }
-    }
-
-    return result;
-}
-
 Mesh rc_mesh_make_sphere(float radius, int slices_count, int stacks_count)
 {
     Mesh result = {0};
@@ -169,6 +115,95 @@ Mesh rc_mesh_make_sphere(float radius, int slices_count, int stacks_count)
         result.vertices = vertices;
         result.indices_count = indices_count;
         result.indices = indices;
+    }
+
+    return result;
+}
+
+bool rc_mesh_load_from_obj(Mesh* mesh, const char* filename)
+{
+    bool result = false;
+    FILE* f = fopen(filename, "r");
+    if (f)
+    {
+        fseek(f, 0, SEEK_END);
+        size_t fsize = ftell(f);
+        rewind(f);
+        char* data = (char*)malloc((fsize + 1) * sizeof(char));
+        if (data)
+        {
+            fsize = fread(data, sizeof(char), fsize, f);
+            data[fsize] = '\0';
+            fclose(f);
+
+            tinyobj_attrib_t attrib;
+            tinyobj_attrib_init(&attrib);
+            tinyobj_shape_t* shapes = NULL;
+            size_t shapes_count = 0;
+            tinyobj_material_t* materials = NULL;
+            size_t materials_count = 0;
+            int parse_result = tinyobj_parse_obj(
+                &attrib, &shapes, &shapes_count, &materials, &materials_count,
+                data, fsize, TINYOBJ_FLAG_TRIANGULATE);
+            if (parse_result == TINYOBJ_SUCCESS)
+            {
+                Vertex* vertices =
+                    (Vertex*)malloc(attrib.num_faces * sizeof(*vertices));
+                if (vertices)
+                {
+                    int vertices_count = 0;
+
+                    int face_offset = 0;
+                    for (uint i = 0; i < attrib.num_face_num_verts; ++i)
+                    {
+                        ASSERT(attrib.face_num_verts[i] ==
+                               3); // All faces must be triangles
+
+                        for (int offset = 0; offset < attrib.face_num_verts[i];
+                             ++offset)
+                        {
+                            tinyobj_vertex_index_t vi =
+                                attrib.faces[face_offset + offset];
+
+                            Vertex v = {0};
+                            v.pos.x = attrib.vertices[vi.v_idx * 3];
+                            v.pos.y = attrib.vertices[vi.v_idx * 3 + 1];
+                            v.pos.z = attrib.vertices[vi.v_idx * 3 + 2];
+                            if (attrib.num_texcoords > 0)
+                            {
+                                v.uv.x = attrib.texcoords[vi.vt_idx * 2];
+                                v.uv.y = attrib.texcoords[vi.vt_idx * 2 + 1];
+                            }
+                            if (attrib.num_normals > 0)
+                            {
+                                v.normal.x = attrib.normals[vi.vn_idx * 3];
+                                v.normal.y = attrib.normals[vi.vn_idx * 3 + 1];
+                                v.normal.z = attrib.normals[vi.vn_idx * 3 + 2];
+                            }
+                            vertices[vertices_count++] = v;
+                        }
+
+                        face_offset += attrib.face_num_verts[i];
+                    }
+
+                    ASSERT(vertices_count == (int)attrib.num_faces);
+
+                    mesh->vertices = vertices;
+                    mesh->vertices_count = vertices_count;
+                    ASSERT(!mesh->indices);
+                    mesh->indices = NULL;
+                    mesh->indices_count = 0;
+
+                    result = true;
+                }
+
+                tinyobj_materials_free(materials, materials_count);
+                tinyobj_shapes_free(shapes, shapes_count);
+                tinyobj_attrib_free(&attrib);
+            }
+
+            free(data);
+        }
     }
 
     return result;

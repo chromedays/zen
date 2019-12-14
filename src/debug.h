@@ -11,7 +11,8 @@
 #else
 
 #define ASSERT(exp) (exp)
-#define PRINT(msg)
+#define PRINT(format, ...)
+#define PRINTLN(format, ...)
 
 #endif
 

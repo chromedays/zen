@@ -14,6 +14,7 @@
     SCENE_UPDATE_FN_SIG(scene_name##_update)
 
 SCENE_DECL(hello_triangle);
+SCENE_DECL(hello_mesh);
 
 typedef struct Win32GlobalState_
 {
@@ -351,9 +352,9 @@ int CALLBACK WinMain(HINSTANCE instance,
 
     Scene scene = {0};
     s_init(&scene, &input);
-    s_switch_scene(&scene, (SceneCallbacks){.init = hello_triangle_init,
-                                            .cleanup = hello_triangle_cleanup,
-                                            .update = hello_triangle_update});
+    s_switch_scene(&scene, (SceneCallbacks){.init = hello_mesh_init,
+                                            .cleanup = hello_mesh_cleanup,
+                                            .update = hello_mesh_update});
 
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);

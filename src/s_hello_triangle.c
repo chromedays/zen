@@ -44,6 +44,7 @@ SCENE_CLEANUP_FN_SIG(hello_triangle_cleanup)
     glDeleteVertexArrays(1, &scene->vao);
     glDeleteBuffers(1, &scene->vbo);
     glDeleteProgram(scene->unlit_shader);
+    free(scene);
 }
 
 SCENE_UPDATE_FN_SIG(hello_triangle_update)

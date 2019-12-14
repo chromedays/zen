@@ -13,6 +13,13 @@ typedef struct Input_ Input;
 #define UNIFORM_PADX(x) UNIFORM_PADXX(x)
 #define UNIFORM_PAD UNIFORM_PADX(__LINE__)
 
+typedef struct Vertex_
+{
+    FVec3 pos;
+    FVec2 uv;
+    FVec3 normal;
+} Vertex;
+
 typedef struct RayTracerSphere_
 {
     FVec3 c;
