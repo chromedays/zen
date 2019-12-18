@@ -16,6 +16,7 @@
 SCENE_DECL(hello_triangle);
 SCENE_DECL(hello_mesh);
 SCENE_DECL(simple_lights);
+SCENE_DECL(normal_mapping);
 
 typedef struct Win32GlobalState_
 {
@@ -353,9 +354,9 @@ int CALLBACK WinMain(HINSTANCE instance,
 
     Scene scene = {0};
     s_init(&scene, &input);
-    s_switch_scene(&scene, (SceneCallbacks){.init = simple_lights_init,
-                                            .cleanup = simple_lights_cleanup,
-                                            .update = simple_lights_update});
+    s_switch_scene(&scene, (SceneCallbacks){.init = normal_mapping_init,
+                                            .cleanup = normal_mapping_cleanup,
+                                            .update = normal_mapping_update});
 
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
