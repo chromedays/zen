@@ -3,6 +3,7 @@
 #include <tinyobj_loader_c.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 void rc_mesh_cleanup(Mesh* mesh)
@@ -21,6 +22,17 @@ Mesh rc_mesh_make_raw(int vertices_count, int indices_count)
     result.vertices_count = vertices_count;
     result.indices = (uint*)malloc(indices_count * sizeof(*result.indices));
     result.indices_count = indices_count;
+    return result;
+}
+
+Mesh rc_mesh_make_raw2(int vertices_count,
+                       int indices_count,
+                       Vertex* vertices,
+                       uint* indices)
+{
+    Mesh result = rc_mesh_make_raw(vertices_count, indices_count);
+    memcpy(result.vertices, vertices, vertices_count * sizeof(Vertex));
+    memcpy(result.indices, indices, indices_count * sizeof(uint));
     return result;
 }
 

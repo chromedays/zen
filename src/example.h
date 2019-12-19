@@ -21,11 +21,6 @@
         .update = scene_name##_update                                          \
     }
 
-EXAMPLE_DECL(hello_triangle);
-EXAMPLE_DECL(hello_mesh);
-EXAMPLE_DECL(simple_lights);
-EXAMPLE_DECL(normal_mapping);
-
 typedef struct Example_
 {
     const char* name;
@@ -54,5 +49,11 @@ typedef struct ExamplePerObjectUBO_
 
 void e_apply_per_frame_ubo(const Example* e, const ExamplePerFrameUBO* data);
 void e_apply_per_object_ubo(const Example* e, const ExamplePerObjectUBO* data);
+
+EXAMPLE_DECL(hello_triangle);
+EXAMPLE_DECL(hello_mesh);
+EXAMPLE_DECL(simple_lights);
+EXAMPLE_DECL(normal_mapping);
+EXAMPLE_DECL(hdr);
 
 #endif // EXAMPLE_H

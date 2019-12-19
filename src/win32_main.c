@@ -345,7 +345,7 @@ int CALLBACK WinMain(HINSTANCE instance,
 
     Scene scene = {0};
     s_init(&scene, &input);
-    s_switch_scene(&scene, EXAMPLE_LITERAL(normal_mapping));
+    s_switch_scene(&scene, EXAMPLE_LITERAL(hello_mesh));
 
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
