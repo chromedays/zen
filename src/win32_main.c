@@ -4,19 +4,10 @@
 #include "renderer.h"
 #include "scene.h"
 #include "app.h"
+#include "example.h"
 #include <himath.h>
 #include <math.h>
 #include <stdlib.h>
-
-#define SCENE_DECL(scene_name)                                                 \
-    SCENE_INIT_FN_SIG(scene_name##_init);                                      \
-    SCENE_CLEANUP_FN_SIG(scene_name##_cleanup);                                \
-    SCENE_UPDATE_FN_SIG(scene_name##_update)
-
-SCENE_DECL(hello_triangle);
-SCENE_DECL(hello_mesh);
-SCENE_DECL(simple_lights);
-SCENE_DECL(normal_mapping);
 
 typedef struct Win32GlobalState_
 {
@@ -354,9 +345,7 @@ int CALLBACK WinMain(HINSTANCE instance,
 
     Scene scene = {0};
     s_init(&scene, &input);
-    s_switch_scene(&scene, (SceneCallbacks){.init = normal_mapping_init,
-                                            .cleanup = normal_mapping_cleanup,
-                                            .update = normal_mapping_update});
+    s_switch_scene(&scene, EXAMPLE_LITERAL(simple_lights));
 
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);

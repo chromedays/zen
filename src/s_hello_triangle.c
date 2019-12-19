@@ -1,5 +1,5 @@
 #include "scene.h"
-#include "resource.h"
+#include "example.h"
 #include <himath.h>
 #include <glad/glad.h>
 #include <stdlib.h>
@@ -11,9 +11,10 @@ typedef struct HelloTriangle_
     GLuint unlit_shader;
 } HelloTriangle;
 
-SCENE_INIT_FN_SIG(hello_triangle_init)
+EXAMPLE_INIT_FN_SIG(hello_triangle)
 {
-    HelloTriangle* scene = (HelloTriangle*)calloc(1, sizeof(*scene));
+    Example* e = e_example_make("hello_triangle", sizeof(HelloTriangle));
+    HelloTriangle* scene = (HelloTriangle*)e->scene;
 
     FVec3 vertices[] = {
         {1, -0.5f, 0},
@@ -31,25 +32,26 @@ SCENE_INIT_FN_SIG(hello_triangle_init)
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
-    scene->unlit_shader =
-        rc_shader_load_from_files("hello_triangle/unlit.vert",
-                                  "hello_triangle/unlit.frag", NULL, NULL, 0);
+    scene->unlit_shader = e_shader_load(e, "unlit");
 
-    return scene;
+    return e;
 }
 
-SCENE_CLEANUP_FN_SIG(hello_triangle_cleanup)
+EXAMPLE_CLEANUP_FN_SIG(hello_triangle)
 {
-    HelloTriangle* scene = (HelloTriangle*)udata;
+    Example* e = (Example*)udata;
+    HelloTriangle* scene = (HelloTriangle*)e->scene;
     glDeleteVertexArrays(1, &scene->vao);
     glDeleteBuffers(1, &scene->vbo);
     glDeleteProgram(scene->unlit_shader);
-    free(scene);
+    e_example_destroy(e);
 }
 
-SCENE_UPDATE_FN_SIG(hello_triangle_update)
+EXAMPLE_UPDATE_FN_SIG(hello_triangle)
 {
-    HelloTriangle* scene = (HelloTriangle*)udata;
+    Example* e = (Example*)udata;
+    HelloTriangle* scene = (HelloTriangle*)e->scene;
+
     glClearColor(0.1f, 0.1f, 0.1f, 1);
     glClear(GL_COLOR_BUFFER_BIT);
     glUseProgram(scene->unlit_shader);

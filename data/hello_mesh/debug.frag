@@ -1,5 +1,3 @@
-#version 460 core
-
 in VertexOut
 {
     vec3 color;

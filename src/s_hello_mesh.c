@@ -2,73 +2,63 @@
 #include "resource.h"
 #include "debug.h"
 #include "app.h"
+#include "example.h"
 #include <himath.h>
 #include <glad/glad.h>
 #include <stdlib.h>
 #include <math.h>
-
-typedef struct PerFrame_
-{
-    Mat4 mvp;
-} PerFrame;
 
 typedef struct HelloMesh_
 {
     Mesh mesh;
     VertexBuffer vb;
     GLuint debug_shader;
-    GLuint per_frame_ubo;
     float t;
 } HelloMesh;
 
-SCENE_INIT_FN_SIG(hello_mesh_init)
+EXAMPLE_INIT_FN_SIG(hello_mesh)
 {
-    HelloMesh* scene = (HelloMesh*)calloc(1, sizeof(*scene));
+    Example* e = (Example*)e_example_make("hello_mesh", sizeof(HelloMesh));
+    HelloMesh* scene = (HelloMesh*)e->scene;
 
     ASSERT(rc_mesh_load_from_obj(&scene->mesh, "shared/models/dragon.obj"));
     r_vb_init(&scene->vb, &scene->mesh, GL_TRIANGLES);
 
-    scene->debug_shader = rc_shader_load_from_files(
-        "hello_mesh/debug.vert", "hello_mesh/debug.frag", NULL, NULL, 0);
+    scene->debug_shader = e_shader_load(e, "debug");
 
-    glGenBuffers(1, &scene->per_frame_ubo);
-    glBindBuffer(GL_UNIFORM_BUFFER, scene->per_frame_ubo);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(PerFrame), NULL, GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, scene->per_frame_ubo);
-
-    return scene;
+    return e;
 }
 
-SCENE_CLEANUP_FN_SIG(hello_mesh_cleanup)
+EXAMPLE_CLEANUP_FN_SIG(hello_mesh)
 {
-    HelloMesh* scene = (HelloMesh*)udata;
+    Example* e = (Example*)udata;
+    HelloMesh* scene = (HelloMesh*)e->scene;
 
     rc_mesh_cleanup(&scene->mesh);
     r_vb_cleanup(&scene->vb);
     glDeleteProgram(scene->debug_shader);
-    glDeleteBuffers(1, &scene->per_frame_ubo);
 
-    free(scene);
+    e_example_destroy(e);
 }
 
-SCENE_UPDATE_FN_SIG(hello_mesh_update)
+EXAMPLE_UPDATE_FN_SIG(hello_mesh)
 {
-    HelloMesh* scene = (HelloMesh*)udata;
+    Example* e = (Example*)udata;
+    HelloMesh* scene = (HelloMesh*)e->scene;
 
     scene->t += input->dt;
 
-    PerFrame per_frame = {0};
-    Mat4 proj = mat4_persp(
+    ExamplePerFrameUBO per_frame = {0};
+    per_frame.proj = mat4_persp(
         60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
         100);
-    Mat4 view = mat4_lookat((FVec3){sinf(scene->t), 0, cosf(scene->t)},
-                            (FVec3){0}, (FVec3){0, 1, 0});
+    per_frame.view = mat4_lookat((FVec3){sinf(scene->t), 0, cosf(scene->t)},
+                                 (FVec3){0}, (FVec3){0, 1, 0});
+    e_apply_per_frame_ubo(e, &per_frame);
 
-    per_frame.mvp = mat4_mul(&proj, &view);
-    glBindBuffer(GL_UNIFORM_BUFFER, scene->per_frame_ubo);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(per_frame), &per_frame);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    ExamplePerObjectUBO per_object = {0};
+    per_object.model = mat4_identity();
+    e_apply_per_object_ubo(e, &per_object);
 
     glClearColor(0.1f, 0.1f, 0.1f, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
