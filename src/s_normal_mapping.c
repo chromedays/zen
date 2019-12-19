@@ -1,27 +1,26 @@
 #include "scene.h"
 #include "resource.h"
 #include "app.h"
+#include "example.h"
+#include <stb_image.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-
-typedef struct PerFrame_
-{
-    Mat4 mvp;
-} PerFrame;
 
 typedef struct NormalMapping_
 {
     Mesh mesh;
     VertexBuffer vb;
     GLuint normal_mapping_shader;
-    GLuint per_frame_ubo;
+    GLuint normal_map;
     float t;
 } NormalMapping;
 
-SCENE_INIT_FN_SIG(normal_mapping_init)
+EXAMPLE_INIT_FN_SIG(normal_mapping)
 {
-    NormalMapping* scene = (NormalMapping*)calloc(1, sizeof(*scene));
+    Example* e =
+        (Example*)e_example_make("normal_mapping", sizeof(NormalMapping));
+    NormalMapping* scene = (NormalMapping*)e->scene;
 
     scene->mesh = rc_mesh_make_raw(4, 6);
     {
@@ -38,51 +37,61 @@ SCENE_INIT_FN_SIG(normal_mapping_init)
 
     r_vb_init(&scene->vb, &scene->mesh, GL_TRIANGLES);
 
-    scene->normal_mapping_shader = rc_shader_load_from_files(
-        "normal_mapping/normal_mapping.vert",
-        "normal_mapping/normal_mapping.frag", NULL, NULL, 0);
+    scene->normal_mapping_shader = e_shader_load(e, "normal_mapping");
 
-    glGenBuffers(1, &scene->per_frame_ubo);
-    glBindBuffer(GL_UNIFORM_BUFFER, scene->per_frame_ubo);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(PerFrame), NULL, GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, scene->per_frame_ubo);
+    int normal_map_width;
+    int normal_map_height;
+    int normal_map_channels_count;
+    stbi_uc* normal_map_data = stbi_load(
+        "normal_mapping/normal_map.png", &normal_map_width, &normal_map_height,
+        &normal_map_channels_count, STBI_rgb_alpha);
+    glGenTextures(1, &scene->normal_map);
+    glBindTexture(GL_TEXTURE_2D, scene->normal_map);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, normal_map_width, normal_map_height,
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, normal_map_data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(normal_map_data);
 
-    return scene;
+    return e;
 }
 
-SCENE_CLEANUP_FN_SIG(normal_mapping_cleanup)
+EXAMPLE_CLEANUP_FN_SIG(normal_mapping)
 {
-    NormalMapping* scene = (NormalMapping*)udata;
+    Example* e = (Example*)udata;
+    NormalMapping* scene = (NormalMapping*)e->scene;
 
     rc_mesh_cleanup(&scene->mesh);
     r_vb_cleanup(&scene->vb);
     glDeleteProgram(scene->normal_mapping_shader);
-    glDeleteBuffers(1, &scene->per_frame_ubo);
+    glDeleteTextures(1, &scene->normal_map);
 
-    free(scene);
+    e_example_destroy(e);
 }
 
-SCENE_UPDATE_FN_SIG(normal_mapping_update)
+EXAMPLE_UPDATE_FN_SIG(normal_mapping)
 {
-    NormalMapping* scene = (NormalMapping*)udata;
+    Example* e = (Example*)udata;
+    NormalMapping* scene = (NormalMapping*)e->scene;
 
-    PerFrame per_frame = {0};
+    scene->t += input->dt;
 
-    Mat4 proj = mat4_persp(
+    ExamplePerFrameUBO per_frame = {0};
+
+    per_frame.proj = mat4_persp(
         60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
         100);
-#if 0
-    Mat4 view = mat4_lookat((FVec3){sinf(scene->t), 1, cosf(scene->t)},
-                            (FVec3){0}, (FVec3){0, 1, 0});
-#else
-    Mat4 view = mat4_lookat((FVec3){0, 1, 1}, (FVec3){0}, (FVec3){0, 1, 0});
-#endif
+    per_frame.view =
+        mat4_lookat((FVec3){0, 1, 1}, (FVec3){0}, (FVec3){0, 1, 0});
+    per_frame.t = scene->t;
+    e_apply_per_frame_ubo(e, &per_frame);
 
-    per_frame.mvp = mat4_mul(&proj, &view);
-    glBindBuffer(GL_UNIFORM_BUFFER, scene->per_frame_ubo);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(per_frame), &per_frame);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    ExamplePerObjectUBO per_object = {0};
+    per_object.model = mat4_identity();
+    e_apply_per_object_ubo(e, &per_object);
 
     glClearColor(0.1f, 0.1f, 0.1f, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -90,6 +99,8 @@ SCENE_UPDATE_FN_SIG(normal_mapping_update)
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
+
     glUseProgram(scene->normal_mapping_shader);
+    glBindTextureUnit(0, scene->normal_map);
     r_vb_draw(&scene->vb);
 }

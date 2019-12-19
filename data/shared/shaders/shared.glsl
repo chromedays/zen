@@ -18,7 +18,7 @@ layout (binding = 1, std140) uniform PerObject
 };
 
 #define MAX_SAMPLERS_COUNT 16
-layout (binding = 2) uniform sampler2D u_samplers[MAX_SAMPLERS_COUNT];
+layout (binding = 0) uniform sampler2D u_samplers[MAX_SAMPLERS_COUNT];
 
 mat4 get_vp()
 {
