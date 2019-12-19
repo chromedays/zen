@@ -3,8 +3,6 @@
 #include "scene.h"
 #include "renderer.h"
 
-// TODO: Rename all s_*.c stuff to ex_*.c
-
 #define EXAMPLE_INIT_FN_SIG(scene_name) SCENE_INIT_FN_SIG(scene_name##_init)
 #define EXAMPLE_CLEANUP_FN_SIG(scene_name)                                     \
     SCENE_CLEANUP_FN_SIG(scene_name##_cleanup)
