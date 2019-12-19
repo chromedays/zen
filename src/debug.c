@@ -8,7 +8,7 @@ static PrintFn* g_log_fn = &d_default_print_callback;
 
 void d_print(const char* format, ...)
 {
-    char buf[1000] = {0};
+    char buf[2000] = {0};
     va_list args;
     va_start(args, format);
     vsprintf(buf, format, args);
