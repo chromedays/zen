@@ -20,22 +20,22 @@ layout (binding = 1, std140) uniform PerObject
 #define MAX_SAMPLERS_COUNT 16
 layout (binding = 0) uniform sampler2D u_samplers[MAX_SAMPLERS_COUNT];
 
-mat4 get_vp()
+mat4 vp()
 {
     return u_proj * u_view;
 }
 
-mat4 get_mvp()
+mat4 mvp()
 {
     return u_proj * u_view * u_model;
 }
 
-vec3 get_unlit_color()
+vec3 unlit_color()
 {
     return u_color;
 }
 
-vec4 get_transformed_vertex()
+vec4 transformed_vertex()
 {
-    return get_mvp() * vec4(v_pos, 1);
+    return mvp() * vec4(v_pos, 1);
 }

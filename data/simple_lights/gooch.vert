@@ -6,5 +6,5 @@ out VertexOut
 void main()
 {
     color = (v_normal + vec3(1)) * 0.5;
-    gl_Position = get_transformed_vertex();
+    gl_Position = transformed_vertex();
 }

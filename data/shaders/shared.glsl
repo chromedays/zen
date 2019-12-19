@@ -49,7 +49,7 @@ mat4 get_mv()
     return u_per_frame.view * u_per_object.model;
 }
 
-mat4 get_mvp()
+mat4 mvp()
 {
     return u_per_frame.proj * u_per_frame.view * u_per_object.model;
 }
