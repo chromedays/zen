@@ -1,6 +1,7 @@
 #include "example.h"
 #include "resource.h"
 #include <histr.h>
+#include <stb_image.h>
 #include <stdlib.h>
 
 Example* e_example_make(const char* name, size_t scene_size)
@@ -52,6 +53,44 @@ GLuint e_shader_load(const Example* e, const char* shader_name)
     histr_destroy(filename_base);
     histr_destroy(vs_filename);
     histr_destroy(fs_filename);
+
+    return result;
+}
+
+GLuint e_texture_load(const Example* e, const char* texture_filename)
+{
+    GLuint result = 0;
+
+    histr_String full_path = histr_makestr(e->name);
+    histr_append(full_path, "/");
+    histr_append(full_path, texture_filename);
+
+    int w, h, cc;
+    stbi_uc* pixels = stbi_load(full_path, &w, &h, &cc, STBI_rgb_alpha);
+    if (pixels && (cc == 3 || cc == 4))
+    {
+        GLuint texture;
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        if (cc == 4)
+        {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
+                         GL_UNSIGNED_BYTE, pixels);
+        }
+        else
+        {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGBA,
+                         GL_UNSIGNED_BYTE, pixels);
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        result = texture;
+    }
+    stbi_image_free(pixels);
 
     return result;
 }

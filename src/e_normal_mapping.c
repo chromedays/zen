@@ -1,7 +1,8 @@
+#include "example.h"
 #include "scene.h"
 #include "resource.h"
 #include "app.h"
-#include "example.h"
+#include "util.h"
 #include <stb_image.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,41 +21,20 @@ EXAMPLE_INIT_FN_SIG(normal_mapping)
 {
     Example* e =
         (Example*)e_example_make("normal_mapping", sizeof(NormalMapping));
-    NormalMapping* scene = (NormalMapping*)e->scene;
+    NormalMapping* s = (NormalMapping*)e->scene;
 
-    scene->mesh = rc_mesh_make_raw(4, 6);
-    {
-        Vertex vertices[] = {
-            {{-0.5f, 0, 0.5f}, {0, 0}},
-            {{0.5f, 0, 0.5f}, {1, 0}},
-            {{0.5f, 0, -0.5f}, {1, 1}},
-            {{-0.5f, 0, -0.5f}, {0, 1}},
-        };
-        uint indices[] = {0, 1, 2, 2, 3, 0};
-        memcpy(scene->mesh.vertices, vertices, sizeof(vertices));
-        memcpy(scene->mesh.indices, indices, sizeof(indices));
-    }
-
-    r_vb_init(&scene->vb, &scene->mesh, GL_TRIANGLES);
-
-    scene->normal_mapping_shader = e_shader_load(e, "normal_mapping");
-
-    int normal_map_width;
-    int normal_map_height;
-    int normal_map_channels_count;
-    stbi_uc* normal_map_data = stbi_load(
-        "normal_mapping/normal_map.png", &normal_map_width, &normal_map_height,
-        &normal_map_channels_count, STBI_rgb_alpha);
-    glGenTextures(1, &scene->normal_map);
-    glBindTexture(GL_TEXTURE_2D, scene->normal_map);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, normal_map_width, normal_map_height,
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, normal_map_data);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(normal_map_data);
+    Vertex vertices[] = {
+        {{-0.5f, 0, 0.5f}, {0, 0}},
+        {{0.5f, 0, 0.5f}, {1, 0}},
+        {{0.5f, 0, -0.5f}, {1, 1}},
+        {{-0.5f, 0, -0.5f}, {0, 1}},
+    };
+    uint indices[] = {0, 1, 2, 2, 3, 0};
+    s->mesh = rc_mesh_make_raw2(ARRAY_LENGTH(vertices), ARRAY_LENGTH(indices),
+                                vertices, indices);
+    r_vb_init(&s->vb, &s->mesh, GL_TRIANGLES);
+    s->normal_mapping_shader = e_shader_load(e, "normal_mapping");
+    s->normal_map = e_texture_load(e, "normal_map.png");
 
     return e;
 }

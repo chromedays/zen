@@ -33,6 +33,7 @@ Example* e_example_make(const char* name, size_t scene_size);
 void e_example_destroy(Example* e);
 
 GLuint e_shader_load(const Example* e, const char* shader_name);
+GLuint e_texture_load(const Example* e, const char* texture_filename);
 
 typedef struct ExamplePerFrameUBO_
 {
