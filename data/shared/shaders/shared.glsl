@@ -26,6 +26,7 @@ layout (binding = 0, std140) uniform PerFrame
     mat4 u_proj;
     PhongLight u_phong_lights[MAX_PHONG_LIGHTS_COUNT];
     int u_phong_lights_count;
+    vec3 u_view_pos;
     float t;// TODO: Rename to u_t
 };
 
@@ -73,14 +74,15 @@ float phong_attenutation(PhongLight light, vec3 pos)
     return attenuation;
 }
 
+// TODO: Needs more tests
 vec3 phong_directional_light_color(PhongLight light,
                                    vec3 normal,
                                    vec3 view_pos, vec3 frag_pos,
                                    vec3 ka, vec3 kd, vec3 ks,
                                    float ns)
 {
-    vec3 l = -light.pos_or_dir;
-    vec3 n = normal;
+    vec3 l = -normalize(light.pos_or_dir);
+    vec3 n = normalize(normal);
     vec3 ambient = light.ambient * ka;
     vec3 diffuse = light.diffuse * kd * max(dot(n, l), 0);
 
@@ -90,4 +92,23 @@ vec3 phong_directional_light_color(PhongLight light,
     vec3 specular = light.specular * ks * spec;
 
     return ambient + diffuse + specular;
+}
+
+vec3 phong_point_light_color(PhongLight light,
+                             vec3 normal, vec3 view_pos, vec3 frag_pos,
+                             vec3 ka, vec3 kd, vec3 ks, float ns)
+{
+    vec3 l = normalize(light.pos_or_dir - frag_pos);
+    vec3 n = normalize(normal);
+    vec3 ambient = light.ambient * ka;
+    vec3 diffuse = light.diffuse * kd * max(dot(n, l), 0);
+
+    vec3 v = normalize(view_pos - frag_pos);
+    vec3 r = reflect(-l, n);
+    float spec = pow(max(dot(v, r), 0), ns);
+    vec3 specular = light.specular * ks * spec;
+
+    float att = phong_attenutation(light, frag_pos);
+
+    return (ambient + diffuse + specular) * att;
 }

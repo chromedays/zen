@@ -70,6 +70,10 @@ typedef struct ExamplePerFrameUBO_
     Mat4 proj;
     ExamplePhongLight phong_lights[MAX_PHONG_LIGHTS_COUNT];
     int phong_lights_count;
+    UNIFORM_PAD;
+    UNIFORM_PAD;
+    UNIFORM_PAD;
+    FVec3 view_pos;
     float t;
 } ExamplePerFrameUBO;
 
