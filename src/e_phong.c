@@ -27,6 +27,7 @@ EXAMPLE_INIT_FN_SIG(phong)
     Example* e = (Example*)e_example_make("phong", sizeof(Phong));
     Phong* s = (Phong*)e->scene;
 
+#if 0
     Vertex vertices[] = {
         {{-0.5f, 0, 0.5f}, {0, 0}, {0, 1, 0}},
         {{0.5f, 0, 0.5f}, {1, 0}, {0, 1, 0}},
@@ -36,11 +37,13 @@ EXAMPLE_INIT_FN_SIG(phong)
     uint indices[] = {0, 1, 2, 2, 3, 0};
     s->plane_mesh = rc_mesh_make_raw2(ARRAY_LENGTH(vertices),
                                       ARRAY_LENGTH(indices), vertices, indices);
+#endif
+    s->plane_mesh = rc_mesh_make_cube();
     r_vb_init(&s->plane_vb, &s->plane_mesh, GL_TRIANGLES);
     s->diffuse_map = e_texture_load(e, "diffuse_map.png");
     s->specular_map = e_texture_load(e, "specular_map.png");
 
-    s->light_source_mesh = rc_mesh_make_sphere(0.1f, 32, 32);
+    s->light_source_mesh = rc_mesh_make_sphere(0.3f, 32, 32);
     r_vb_init(&s->light_source_vb, &s->light_source_mesh, GL_TRIANGLES);
 
     s->unlit_shader = e_shader_load(e, "unlit");
@@ -116,7 +119,7 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     per_frame.proj = mat4_persp(
         60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
         100);
-    FVec3 view_pos = {0, 0, 10};
+    FVec3 view_pos = {0, 0, 3};
     per_frame.view = mat4_lookat(view_pos, (FVec3){0}, (FVec3){0, 1, 0});
     for (int i = 0; i < s->lights_count; i++)
         per_frame.phong_lights[i] = s->lights[i];
@@ -124,16 +127,6 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     per_frame.view_pos = view_pos;
     per_frame.t = s->t;
     e_apply_per_frame_ubo(e, &per_frame);
-
-    {
-        ExamplePerObjectUBO per_object = {0};
-        Mat4 trans = mat4_translation((FVec3){0, -4, -5});
-        Mat4 scale = mat4_scalev((FVec3){20, 1, 20});
-        // Mat4 scale = mat4_scalev((FVec3){1, 1, 1});
-        per_object.model = mat4_mul(&trans, &scale);
-        per_object.color = (FVec3){1, 0, 0};
-        e_apply_per_object_ubo(e, &per_object);
-    }
 
     glClearColor(0.1f, 0.1f, 0.1f, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -145,7 +138,26 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     glUseProgram(s->blinn_shader);
     glBindTextureUnit(0, s->diffuse_map);
     glBindTextureUnit(1, s->specular_map);
-    r_vb_draw(&s->plane_vb);
+
+    {
+        FVec3 cube_positions[] = {{0.0f, 0.0f, 0.0f},    {2.0f, 5.0f, -15.0f},
+                                  {-1.5f, -2.2f, -2.5f}, {-3.8f, -2.0f, -12.3f},
+                                  {2.4f, -0.4f, -3.5f},  {-1.7f, 3.0f, -7.5f},
+                                  {1.3f, -2.0f, -2.5f},  {1.5f, 2.0f, -2.5f},
+                                  {1.5f, 0.2f, -1.5f},   {-1.3f, 1.0f, -1.5f}};
+        for (int i = 0; i < (int)ARRAY_LENGTH(cube_positions); i++)
+        {
+            ExamplePerObjectUBO per_object = {0};
+            Mat4 trans = mat4_translation(cube_positions[i]);
+            float angle = (float)(i + 1) * 20.f * s->t;
+            Mat4 rot =
+                quat_to_matrix(quat_rotate((FVec3){1, 0.3f, 0.5f}, angle));
+            per_object.model = mat4_mul(&trans, &rot);
+            per_object.color = (FVec3){1, 0, 0};
+            e_apply_per_object_ubo(e, &per_object);
+            r_vb_draw(&s->plane_vb);
+        }
+    }
 
     glUseProgram(s->unlit_shader);
     for (int i = 1; i < s->lights_count; i++)

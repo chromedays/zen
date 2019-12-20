@@ -12,6 +12,8 @@ out vec3 out_color;
 
 void main()
 {
+    vec3 n = normalize(normal_world);
+
     //out_color = texture(SPECULAR_MAP, uv).rgb;
     vec3 color = vec3(0);
 
@@ -25,17 +27,18 @@ void main()
         if (light.type == 1)
         {
             color += phong_directional_light_color(
-                light, normal_world, u_view_pos, pos_world,
+                light, n, u_view_pos, pos_world,
                 ka, kd, ks, ns);
         }
         else if (light.type == 2)
         {
             color += phong_point_light_color(
-                light, normal_world, u_view_pos, pos_world,
+                light, n, u_view_pos, pos_world,
                 ka, kd, ks, ns);
         }
     }
 
     out_color = color;
-    //out_color = vec3(0, 0.5, 0);
+
+    //out_color = (n + vec3(1)) * 0.5;
 }

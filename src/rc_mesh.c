@@ -1,5 +1,6 @@
 #include "resource.h"
 #include "debug.h"
+#include "util.h"
 #include <tinyobj_loader_c.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,11 +18,17 @@ void rc_mesh_cleanup(Mesh* mesh)
 Mesh rc_mesh_make_raw(int vertices_count, int indices_count)
 {
     Mesh result = {0};
-    result.vertices =
-        (Vertex*)malloc(vertices_count * sizeof(*result.vertices));
-    result.vertices_count = vertices_count;
-    result.indices = (uint*)malloc(indices_count * sizeof(*result.indices));
-    result.indices_count = indices_count;
+    if (vertices_count > 0)
+    {
+        result.vertices =
+            (Vertex*)malloc(vertices_count * sizeof(*result.vertices));
+        result.vertices_count = vertices_count;
+    }
+    if (indices_count > 0)
+    {
+        result.indices = (uint*)malloc(indices_count * sizeof(*result.indices));
+        result.indices_count = indices_count;
+    }
     return result;
 }
 
@@ -31,8 +38,61 @@ Mesh rc_mesh_make_raw2(int vertices_count,
                        uint* indices)
 {
     Mesh result = rc_mesh_make_raw(vertices_count, indices_count);
-    memcpy(result.vertices, vertices, vertices_count * sizeof(Vertex));
-    memcpy(result.indices, indices, indices_count * sizeof(uint));
+    if (vertices_count > 0)
+        memcpy(result.vertices, vertices, vertices_count * sizeof(Vertex));
+    if (indices_count > 0)
+        memcpy(result.indices, indices, indices_count * sizeof(uint));
+    return result;
+}
+
+Mesh rc_mesh_make_cube()
+{
+    // clang-format off
+    Vertex vertices[] = {
+        // Front
+        {{-0.5f, -0.5f, 0.5f}, {1, 0}, {0, 0, 1}},
+        {{0.5f, -0.5f, 0.5f}, {0, 0}, {0, 0, 1}},
+        {{0.5f, 0.5f, 0.5f}, {0, 1}, {0, 0, 1}},
+        {{-0.5f, 0.5f, 0.5f}, {1, 1}, {0, 0, 1}},
+        // Back
+        {{0.5f, -0.5f, -0.5f}, {1, 0}, {0, 0, -1}},
+        {{-0.5f, -0.5f, -0.5f}, {0, 0}, {0, 0, -1}},
+        {{-0.5f, 0.5f, -0.5f}, {0, 1}, {0, 0, -1}},
+        {{0.5f, 0.5f, -0.5f}, {1, 1}, {0, 0, -1}},
+        // Left
+        {{0.5f, -0.5f, 0.5f}, {1, 0}, {1, 0, 0}},
+        {{0.5f, -0.5f, -0.5f}, {0, 0}, {1, 0, 0}},
+        {{0.5f, 0.5f, -0.5f}, {0, 1}, {1, 0, 0}},
+        {{0.5f, 0.5f, 0.5f}, {1, 1}, {1, 0, 0}},
+        // Right
+        {{-0.5f, -0.5f, -0.5f}, {1, 0}, {-1, 0, 0}},
+        {{-0.5f, -0.5f, 0.5f}, {0, 0}, {-1, 0, 0}},
+        {{-0.5f, 0.5f, 0.5f}, {0, 1}, {-1, 0, 0}},
+        {{-0.5f, 0.5f, -0.5f}, {1, 1}, {-1, 0, 0}},
+        // Top
+        {{0.5f, 0.5f, -0.5f}, {1, 0}, {0, 1, 0}},
+        {{-0.5f, 0.5f, -0.5f}, {0, 0}, {0, 1, 0}},
+        {{-0.5f, 0.5f, 0.5f}, {0, 1}, {0, 1, 0}},
+        {{0.5f, 0.5f, 0.5f}, {1, 1}, {0, 1, 0}},
+        // Bottom
+        {{0.5f, -0.5f, 0.5f}, {1, 0}, {0, -1, 0}},
+        {{-0.5f, -0.5f, 0.5f}, {0, 0}, {0, -1, 0}},
+        {{-0.5f, -0.5f, -0.5f}, {0, 1}, {0, -1, 0}},
+        {{0.5f, -0.5f, -0.5f}, {1, 1}, {0, -1, 0}},
+    };
+
+    uint indices[] = {
+        0, 1, 2, 2, 3, 0,
+        4, 5, 6, 6, 7, 4,
+        8, 9, 10, 10, 11, 8,
+        12, 13, 14, 14, 15, 12,
+        16, 17, 18, 18, 19, 16,
+        20, 21, 22, 22, 23, 20,
+    };
+    // clang-format on
+
+    Mesh result = rc_mesh_make_raw2(ARRAY_LENGTH(vertices),
+                                    ARRAY_LENGTH(indices), vertices, indices);
     return result;
 }
 

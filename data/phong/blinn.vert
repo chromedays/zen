@@ -8,7 +8,7 @@ out VertexOut
 void main()
 {
     pos_world = model_to_world_point(v_pos).xyz;
-    normal_world = v_normal;
+    normal_world = model_to_world_vector(v_normal);
     uv = v_uv;
     gl_Position = transformed_vertex();
 }
