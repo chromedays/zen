@@ -321,23 +321,6 @@ int CALLBACK WinMain(HINSTANCE instance,
     Win32App app = {0};
     ASSERT(win32_app_init(&app, instance, "Zen", 1280, 720, 32, 24, 8, 4, 6));
 
-    int work_group_counts[3] = {0};
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &work_group_counts[0]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &work_group_counts[1]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &work_group_counts[2]);
-    PRINTLN("Max global work group sizes: (%d,%d,%d)", work_group_counts[0],
-            work_group_counts[1], work_group_counts[2]);
-    int work_group_sizes[3] = {0};
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 0, &work_group_sizes[0]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 1, &work_group_sizes[1]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 2, &work_group_sizes[2]);
-    PRINTLN("Max local work group sizes: (%d,%d,%d)", work_group_sizes[0],
-            work_group_sizes[1], work_group_sizes[2]);
-    int max_work_group_invocations = 0;
-    glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS,
-                  &max_work_group_invocations);
-    PRINTLN("Max local work group invocations: %d", max_work_group_invocations);
-
     r_gui_init();
 
     Input input = {0};

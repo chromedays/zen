@@ -4,6 +4,7 @@
 #include "debug.h"
 #include "util.h"
 #include <glad/glad_wgl.h>
+#include <glad/vulkan.h>
 #include <himath.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +24,7 @@ static HGLRC win32_gl_context_make(HDC dc,
                                    int stencil_bits,
                                    int major_version,
                                    int minor_version);
+static void win32_vk_init();
 
 LRESULT CALLBACK win32_message_callback(HWND window,
                                         UINT msg,
@@ -102,6 +104,7 @@ bool win32_app_init(Win32App* app,
             app->rc = win32_gl_context_make(app->dc, color_bits, depth_bits,
                                             stencil_bits, gl_major_version,
                                             gl_minor_version);
+            win32_vk_init();
             result = true;
         }
     }
@@ -264,5 +267,153 @@ static HGLRC win32_gl_context_make(HDC dc,
     ASSERT(gladLoadGLLoader((GLADloadproc)&win32_gl_get_proc));
     ASSERT(gladLoadGL());
 
+    int work_group_counts[3] = {0};
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &work_group_counts[0]);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &work_group_counts[1]);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &work_group_counts[2]);
+    PRINTLN("Max global work group sizes: (%d,%d,%d)", work_group_counts[0],
+            work_group_counts[1], work_group_counts[2]);
+    int work_group_sizes[3] = {0};
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 0, &work_group_sizes[0]);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 1, &work_group_sizes[1]);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 2, &work_group_sizes[2]);
+    PRINTLN("Max local work group sizes: (%d,%d,%d)", work_group_sizes[0],
+            work_group_sizes[1], work_group_sizes[2]);
+    int max_work_group_invocations = 0;
+    glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS,
+                  &max_work_group_invocations);
+    PRINTLN("Max local work group invocations: %d", max_work_group_invocations);
+
     return rc;
+}
+
+typedef struct CheckPhysicalDevicePropertiesResult_
+{
+    bool is_selected;
+    uint32_t queue_family_index;
+} CheckPhysicalDevicePropertiesResult;
+
+static CheckPhysicalDevicePropertiesResult
+    vk_check_physical_device_properties(VkPhysicalDevice physical_device)
+{
+    CheckPhysicalDevicePropertiesResult result = {0};
+
+    VkPhysicalDeviceProperties properties;
+    vkGetPhysicalDeviceProperties(physical_device, &properties);
+
+    if (properties.limits.maxImageDimension2D >= 4096)
+    {
+        // VkPhysicalDeviceFeatures features;
+        // vkGetPhysicalDeviceFeatures(physical_device, &features);
+
+        uint32_t queue_family_properties_count = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(
+            physical_device, &queue_family_properties_count, NULL);
+        VkQueueFamilyProperties queue_family_properties[10];
+        ASSERT((queue_family_properties_count <=
+                ARRAY_LENGTH(queue_family_properties)));
+        if (queue_family_properties_count > 0)
+        {
+            vkGetPhysicalDeviceQueueFamilyProperties(
+                physical_device, &queue_family_properties_count,
+                queue_family_properties);
+
+            for (uint32_t i = 0; i < queue_family_properties_count; i++)
+            {
+                if ((queue_family_properties[i].queueCount > 0) &&
+                    (queue_family_properties[i].queueFlags &
+                     VK_QUEUE_GRAPHICS_BIT))
+                {
+                    result.is_selected = true;
+                    result.queue_family_index = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+static void win32_vk_init()
+{
+    int glad_load_result = gladLoaderLoadVulkan(NULL, NULL, NULL);
+    VkInstance instance;
+    ASSERT(vkCreateInstance(
+               &(VkInstanceCreateInfo){
+                   .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+                   .pApplicationInfo =
+                       &(VkApplicationInfo){
+                           .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+                           .pApplicationName = "Zen Vulkan Application",
+                           .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+                           .pEngineName = "Zen Vulkan Engine",
+                           .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+                           .apiVersion = VK_API_VERSION_1_1,
+                       },
+               },
+               NULL, &instance) == VK_SUCCESS);
+    glad_load_result = gladLoaderLoadVulkan(instance, NULL, NULL);
+    uint32_t physical_devices_count = 0;
+    ASSERT(vkEnumeratePhysicalDevices(instance, &physical_devices_count,
+                                      NULL) == VK_SUCCESS);
+    VkPhysicalDevice physical_devices[10];
+    ASSERT((physical_devices_count > 0) &&
+           (physical_devices_count <= ARRAY_LENGTH(physical_devices)));
+    ASSERT(vkEnumeratePhysicalDevices(instance, &physical_devices_count,
+                                      physical_devices) == VK_SUCCESS);
+
+    VkPhysicalDevice selected_physical_device = VK_NULL_HANDLE;
+    uint32_t selected_queue_family_index = 0;
+    for (uint32_t i = 0; i < physical_devices_count; i++)
+    {
+        VkPhysicalDevice physical_device = physical_devices[i];
+        CheckPhysicalDevicePropertiesResult check_result =
+            vk_check_physical_device_properties(physical_device);
+        if (check_result.is_selected)
+        {
+            selected_physical_device = physical_device;
+            selected_queue_family_index = check_result.queue_family_index;
+            break;
+        }
+    }
+    ASSERT(selected_physical_device != VK_NULL_HANDLE);
+
+    float queue_priorities[] = {1};
+
+    VkDevice device;
+    ASSERT(vkCreateDevice(
+               selected_physical_device,
+               &(VkDeviceCreateInfo){
+                   .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+                   .queueCreateInfoCount = 1,
+                   .pQueueCreateInfos =
+                       &(VkDeviceQueueCreateInfo){
+                           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                           .queueFamilyIndex = selected_queue_family_index,
+                           .queueCount = ARRAY_LENGTH(queue_priorities),
+                           .pQueuePriorities = queue_priorities,
+
+                       },
+               },
+               NULL, &device) == VK_SUCCESS);
+
+    glad_load_result =
+        gladLoaderLoadVulkan(instance, selected_physical_device, device);
+}
+
+static void win32_vk_cleanup(VkInstance instance, VkDevice device)
+{
+    if (device != VK_NULL_HANDLE)
+    {
+        vkDeviceWaitIdle(device);
+        vkDestroyDevice(device, NULL);
+    }
+
+    if (instance != VK_NULL_HANDLE)
+    {
+        vkDestroyInstance(instance, NULL);
+    }
+
+    gladLoaderUnloadVulkan();
 }
