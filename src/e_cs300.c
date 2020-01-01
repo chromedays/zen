@@ -10,7 +10,7 @@
 
 #define MAX_MODEL_FILES_COUNT 100
 
-typedef struct CS300_1_
+typedef struct CS300_
 {
     Path model_file_paths[MAX_MODEL_FILES_COUNT];
     int model_file_paths_count;
@@ -24,19 +24,19 @@ typedef struct CS300_1_
 
     uint shader;
     float t;
-} CS300_1;
+} CS300;
 
 static FILE_FOREACH_FN_DECL(push_model_filename)
 {
-    CS300_1* s = (CS300_1*)udata;
+    CS300* s = (CS300*)udata;
     ASSERT(s->model_file_paths_count <= ARRAY_LENGTH(s->model_file_paths));
     s->model_file_paths[s->model_file_paths_count++] = fs_path_copy(*file_path);
 }
 
-EXAMPLE_INIT_FN_SIG(cs300_1)
+EXAMPLE_INIT_FN_SIG(cs300)
 {
-    Example* e = e_example_make("cs300_1", sizeof(CS300_1));
-    CS300_1* s = (CS300_1*)e->scene;
+    Example* e = e_example_make("cs300", sizeof(CS300));
+    CS300* s = (CS300*)e->scene;
 
     Path model_root_path = fs_path_make_working_dir();
     fs_path_append2(&model_root_path, "shared", "models");
@@ -51,10 +51,10 @@ EXAMPLE_INIT_FN_SIG(cs300_1)
     return e;
 }
 
-EXAMPLE_CLEANUP_FN_SIG(cs300_1)
+EXAMPLE_CLEANUP_FN_SIG(cs300)
 {
     Example* e = (Example*)udata;
-    CS300_1* s = (CS300_1*)e->scene;
+    CS300* s = (CS300*)e->scene;
 
     glDeleteProgram(s->shader);
 
@@ -67,10 +67,10 @@ EXAMPLE_CLEANUP_FN_SIG(cs300_1)
     free(e);
 }
 
-EXAMPLE_UPDATE_FN_SIG(cs300_1)
+EXAMPLE_UPDATE_FN_SIG(cs300)
 {
     Example* e = (Example*)udata;
-    CS300_1* s = (CS300_1*)e->scene;
+    CS300* s = (CS300*)e->scene;
 
     s->t += input->dt;
 
