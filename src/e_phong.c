@@ -74,7 +74,7 @@ EXAMPLE_INIT_FN_SIG(phong)
                       ARRAY_LENGTH(point_light_colors),
                   "positions and colors should have same number of elements");
 
-    for (int i = 0; i < (int)ARRAY_LENGTH(point_light_colors); i++)
+    for (int i = 0; i < ARRAY_LENGTH(point_light_colors); i++)
     {
         s->lights[i + 1] = (ExamplePhongLight){
             .type = ExamplePhongLightType_Point,
@@ -87,7 +87,7 @@ EXAMPLE_INIT_FN_SIG(phong)
         };
     }
 
-    s->lights_count = (int)ARRAY_LENGTH(point_light_colors) + 1;
+    s->lights_count = ARRAY_LENGTH(point_light_colors) + 1;
 
     return e;
 }
@@ -145,7 +145,7 @@ EXAMPLE_UPDATE_FN_SIG(phong)
                                   {2.4f, -0.4f, -3.5f},  {-1.7f, 3.0f, -7.5f},
                                   {1.3f, -2.0f, -2.5f},  {1.5f, 2.0f, -2.5f},
                                   {1.5f, 0.2f, -1.5f},   {-1.3f, 1.0f, -1.5f}};
-        for (int i = 0; i < (int)ARRAY_LENGTH(cube_positions); i++)
+        for (int i = 0; i < ARRAY_LENGTH(cube_positions); i++)
         {
             ExamplePerObjectUBO per_object = {0};
             Mat4 trans = mat4_translation(cube_positions[i]);
