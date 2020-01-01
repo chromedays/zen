@@ -93,4 +93,6 @@ EXAMPLE_DECL(simple_lights);
 EXAMPLE_DECL(normal_mapping);
 EXAMPLE_DECL(hdr);
 
+EXAMPLE_DECL(cs300_1);
+
 #endif // EXAMPLE_H
