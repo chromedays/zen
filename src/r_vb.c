@@ -48,6 +48,8 @@ void r_vb_cleanup(VertexBuffer* vb)
     glDeleteBuffers(1, &vb->vbo);
     if (vb->ebo != 0)
         glDeleteBuffers(1, &vb->ebo);
+
+    *vb = (VertexBuffer){0};
 }
 
 void r_vb_draw(const VertexBuffer* vb)

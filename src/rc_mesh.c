@@ -13,6 +13,8 @@ void rc_mesh_cleanup(Mesh* mesh)
         free(mesh->vertices);
     if (mesh->indices)
         free(mesh->indices);
+
+    *mesh = (Mesh){0};
 }
 
 Mesh rc_mesh_make_raw(int vertices_count, int indices_count)
