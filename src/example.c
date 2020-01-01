@@ -61,8 +61,7 @@ GLuint e_texture_load(const Example* e, const char* texture_filename)
 {
     GLuint result = 0;
 
-    histr_String full_path = histr_makestr(e->name);
-    histr_append(full_path, "/");
+    histr_String full_path = histr_makestr("shared/textures/");
     histr_append(full_path, texture_filename);
 
     int w, h, cc;

@@ -40,8 +40,8 @@ EXAMPLE_INIT_FN_SIG(phong)
 #endif
     s->plane_mesh = rc_mesh_make_cube();
     r_vb_init(&s->plane_vb, &s->plane_mesh, GL_TRIANGLES);
-    s->diffuse_map = e_texture_load(e, "diffuse_map.png");
-    s->specular_map = e_texture_load(e, "specular_map.png");
+    s->diffuse_map = e_texture_load(e, "box_diffuse.png");
+    s->specular_map = e_texture_load(e, "box_specular.png");
 
     s->light_source_mesh = rc_mesh_make_sphere(0.3f, 32, 32);
     r_vb_init(&s->light_source_vb, &s->light_source_mesh, GL_TRIANGLES);

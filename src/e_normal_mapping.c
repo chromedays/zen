@@ -34,7 +34,7 @@ EXAMPLE_INIT_FN_SIG(normal_mapping)
                                 vertices, indices);
     r_vb_init(&s->vb, &s->mesh, GL_TRIANGLES);
     s->normal_mapping_shader = e_shader_load(e, "normal_mapping");
-    s->normal_map = e_texture_load(e, "normal_map.png");
+    s->normal_map = e_texture_load(e, "wall_normal.png");
 
     return e;
 }
