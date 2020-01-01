@@ -9,6 +9,7 @@
 #include <math.h>
 
 #define MAX_MODEL_FILES_COUNT 100
+//#define MAX_LIGHT_SOURCES_COUNT 100
 
 typedef struct CS300_
 {
@@ -18,9 +19,18 @@ typedef struct CS300_
     int current_model_index;
     Mesh model_mesh;
     VertexBuffer model_vb;
-
     FVec3 model_pos;
     float model_scale;
+
+    Mesh light_source_mesh;
+    VertexBuffer light_source_vb;
+
+    int light_sources_count;
+
+    float orbit_speed_deg;
+    float orbit_radius;
+
+    float camera_distance;
 
     uint shader;
     float t;
@@ -45,6 +55,15 @@ EXAMPLE_INIT_FN_SIG(cs300)
     fs_path_cleanup(&model_root_path);
 
     s->current_model_index = -1;
+
+    s->light_source_mesh = rc_mesh_make_sphere(0.05f, 32, 32);
+    r_vb_init(&s->light_source_vb, &s->light_source_mesh, GL_TRIANGLES);
+    s->light_sources_count = 10;
+
+    s->orbit_speed_deg = 30;
+    s->orbit_radius = 0.5f;
+
+    s->camera_distance = 3;
 
     s->shader = e_shader_load(e, "debug");
 
@@ -132,15 +151,9 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
     per_frame.proj = mat4_persp(
         60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
         100);
-    per_frame.view = mat4_lookat((FVec3){sinf(s->t), 0, cosf(s->t)}, (FVec3){0},
+    per_frame.view = mat4_lookat((FVec3){0, 1, s->camera_distance}, (FVec3){0},
                                  (FVec3){0, 1, 0});
     e_apply_per_frame_ubo(e, &per_frame);
-
-    ExamplePerObjectUBO per_object = {0};
-    Mat4 scale_mat = mat4_scale(s->model_scale);
-    Mat4 trans_mat = mat4_translation(s->model_pos);
-    per_object.model = mat4_mul(&trans_mat, &scale_mat);
-    e_apply_per_object_ubo(e, &per_object);
 
     glClearColor(0.2f, 0.2f, 0.2f, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -150,7 +163,32 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
     glFrontFace(GL_CCW);
     if (s->current_model_index >= 0)
     {
+        ExamplePerObjectUBO per_object = {0};
+        Mat4 scale_mat = mat4_scale(s->model_scale);
+        Mat4 rot_mat =
+            quat_to_matrix(quat_rotate((FVec3){0, 1, 0}, 90.f * s->t));
+        Mat4 trans_mat = mat4_translation(s->model_pos);
+        per_object.model = mat4_mul(&trans_mat, &scale_mat);
+        per_object.model = mat4_mul(&rot_mat, &per_object.model);
+        e_apply_per_object_ubo(e, &per_object);
         glUseProgram(s->shader);
         r_vb_draw(&s->model_vb);
+    }
+
+    for (int i = 0; i < s->light_sources_count; i++)
+    {
+        float deg = ((360.f / (float)s->light_sources_count) * (float)i +
+                     s->t * s->orbit_speed_deg);
+        float rad = degtorad(deg);
+        FVec3 pos = {
+            .x = cosf(rad) * s->orbit_radius,
+            .z = sinf(rad) * s->orbit_radius,
+        };
+
+        Mat4 trans_mat = mat4_translation(pos);
+        ExamplePerObjectUBO per_object = {.model = trans_mat};
+        e_apply_per_object_ubo(e, &per_object);
+        glUseProgram(s->shader);
+        r_vb_draw(&s->light_source_vb);
     }
 }
