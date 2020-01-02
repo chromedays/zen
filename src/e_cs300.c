@@ -9,7 +9,12 @@
 #include <math.h>
 
 #define MAX_MODEL_FILES_COUNT 100
-//#define MAX_LIGHT_SOURCES_COUNT 100
+#define MAX_LIGHT_SOURCES_COUNT 100
+
+typedef struct LightSource_
+{
+    FVec3 color;
+} LightSource;
 
 typedef struct CS300_
 {
@@ -21,18 +26,19 @@ typedef struct CS300_
     VertexBuffer model_vb;
     FVec3 model_pos;
     float model_scale;
+    uint model_shader;
 
     Mesh light_source_mesh;
     VertexBuffer light_source_vb;
-
+    LightSource light_sources[MAX_LIGHT_SOURCES_COUNT];
     int light_sources_count;
+    uint light_source_shader;
 
     float orbit_speed_deg;
     float orbit_radius;
 
     float camera_distance;
 
-    uint shader;
     float t;
 } CS300;
 
@@ -41,6 +47,63 @@ static FILE_FOREACH_FN_DECL(push_model_filename)
     CS300* s = (CS300*)udata;
     ASSERT(s->model_file_paths_count <= ARRAY_LENGTH(s->model_file_paths));
     s->model_file_paths[s->model_file_paths_count++] = fs_path_copy(*file_path);
+}
+
+static void try_switch_model(CS300* s, int new_model_index)
+{
+    if (s->current_model_index != new_model_index)
+    {
+        ASSERT((new_model_index >= 0) &&
+               (new_model_index < s->model_file_paths_count));
+
+        if (s->current_model_index >= 0)
+        {
+            rc_mesh_cleanup(&s->model_mesh);
+            r_vb_cleanup(&s->model_vb);
+        }
+
+        rc_mesh_load_from_obj(
+            &s->model_mesh, s->model_file_paths[new_model_index].abs_path_str);
+        FVec3 bb_min = s->model_mesh.vertices[0].pos;
+        FVec3 bb_max = s->model_mesh.vertices[0].pos;
+        for (int j = 1; j < s->model_mesh.vertices_count; j++)
+        {
+            FVec3 pos = s->model_mesh.vertices[j].pos;
+            if (bb_min.x > pos.x)
+                bb_min.x = pos.x;
+            if (bb_min.y > pos.y)
+                bb_min.y = pos.y;
+            if (bb_min.z > pos.z)
+                bb_min.z = pos.z;
+
+            if (bb_max.x < pos.x)
+                bb_max.x = pos.x;
+            if (bb_max.y < pos.y)
+                bb_max.y = pos.y;
+            if (bb_max.z < pos.z)
+                bb_max.z = pos.z;
+        }
+
+        s->model_scale = 1.f / fvec3_length(fvec3_sub(bb_max, bb_min));
+        s->model_pos = fvec3_negate(fvec3_mulf(
+            fvec3_mulf(fvec3_add(bb_min, bb_max), 0.5f), s->model_scale));
+
+        r_vb_init(&s->model_vb, &s->model_mesh, GL_TRIANGLES);
+
+        s->current_model_index = new_model_index;
+    }
+}
+
+float get_channel_function1(float x, float period)
+{
+    float coeff = (HIMATH_PI * 2.f) / period;
+    return (0.5f * cosf(coeff * x) + 0.5f);
+}
+
+float get_channel_function2(float x, float period)
+{
+    float coeff = (HIMATH_PI * 2.f) / period;
+    return (0.5f * cosf(coeff * (x + period * 0.5f)) + 0.5f);
 }
 
 EXAMPLE_INIT_FN_SIG(cs300)
@@ -55,17 +118,39 @@ EXAMPLE_INIT_FN_SIG(cs300)
     fs_path_cleanup(&model_root_path);
 
     s->current_model_index = -1;
+    try_switch_model(s, 0);
+    s->model_shader = e_shader_load(e, "debug");
 
     s->light_source_mesh = rc_mesh_make_sphere(0.05f, 32, 32);
     r_vb_init(&s->light_source_vb, &s->light_source_mesh, GL_TRIANGLES);
     s->light_sources_count = 10;
 
+    // Smoothly interpolate from red to green to blue
+    for (int i = 0; i < s->light_sources_count; i++)
+    {
+        float period = (float)(s->light_sources_count - 1) * 0.666666f;
+
+        float rx1 = HIMATH_CLAMP((float)i, 0, period * 0.5f);
+        float rx2 = HIMATH_CLAMP((float)i, period, period * 1.5f);
+        float gx = HIMATH_CLAMP((float)i, 0, period);
+        float bx = HIMATH_CLAMP((float)i, period * 0.5f, period * 1.5f);
+
+        float r = get_channel_function1(rx1, period) +
+                  get_channel_function2(rx2, period);
+        float g = get_channel_function2(gx, period);
+        float b = get_channel_function1(bx, period);
+
+        s->light_sources[i].color.x = r;
+        s->light_sources[i].color.y = g;
+        s->light_sources[i].color.z = b;
+    }
+
+    s->light_source_shader = e_shader_load(e, "light_source");
+
     s->orbit_speed_deg = 30;
     s->orbit_radius = 0.5f;
 
     s->camera_distance = 3;
-
-    s->shader = e_shader_load(e, "debug");
 
     return e;
 }
@@ -75,8 +160,11 @@ EXAMPLE_CLEANUP_FN_SIG(cs300)
     Example* e = (Example*)udata;
     CS300* s = (CS300*)e->scene;
 
-    glDeleteProgram(s->shader);
+    glDeleteProgram(s->light_source_shader);
+    r_vb_cleanup(&s->light_source_vb);
+    rc_mesh_cleanup(&s->light_source_mesh);
 
+    glDeleteProgram(s->model_shader);
     r_vb_cleanup(&s->model_vb);
     rc_mesh_cleanup(&s->model_mesh);
 
@@ -101,46 +189,7 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
             if (igMenuItemBool(s->model_file_paths[i].abs_path_str, NULL, false,
                                true))
             {
-                if (i != s->current_model_index)
-                {
-                    if (s->current_model_index >= 0)
-                    {
-                        rc_mesh_cleanup(&s->model_mesh);
-                        r_vb_cleanup(&s->model_vb);
-                    }
-
-                    rc_mesh_load_from_obj(&s->model_mesh,
-                                          s->model_file_paths[i].abs_path_str);
-                    FVec3 bb_min = s->model_mesh.vertices[0].pos;
-                    FVec3 bb_max = s->model_mesh.vertices[0].pos;
-                    for (int j = 1; j < s->model_mesh.vertices_count; j++)
-                    {
-                        FVec3 pos = s->model_mesh.vertices[j].pos;
-                        if (bb_min.x > pos.x)
-                            bb_min.x = pos.x;
-                        if (bb_min.y > pos.y)
-                            bb_min.y = pos.y;
-                        if (bb_min.z > pos.z)
-                            bb_min.z = pos.z;
-
-                        if (bb_max.x < pos.x)
-                            bb_max.x = pos.x;
-                        if (bb_max.y < pos.y)
-                            bb_max.y = pos.y;
-                        if (bb_max.z < pos.z)
-                            bb_max.z = pos.z;
-                    }
-
-                    s->model_scale =
-                        1.f / fvec3_length(fvec3_sub(bb_max, bb_min));
-                    s->model_pos = fvec3_negate(
-                        fvec3_mulf(fvec3_mulf(fvec3_add(bb_min, bb_max), 0.5f),
-                                   s->model_scale));
-
-                    r_vb_init(&s->model_vb, &s->model_mesh, GL_TRIANGLES);
-
-                    s->current_model_index = i;
-                }
+                try_switch_model(s, i);
             }
         }
         igEndMenu();
@@ -171,7 +220,7 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
         per_object.model = mat4_mul(&trans_mat, &scale_mat);
         per_object.model = mat4_mul(&rot_mat, &per_object.model);
         e_apply_per_object_ubo(e, &per_object);
-        glUseProgram(s->shader);
+        glUseProgram(s->model_shader);
         r_vb_draw(&s->model_vb);
     }
 
@@ -186,9 +235,12 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
         };
 
         Mat4 trans_mat = mat4_translation(pos);
-        ExamplePerObjectUBO per_object = {.model = trans_mat};
+        ExamplePerObjectUBO per_object = {
+            .model = trans_mat,
+            .color = s->light_sources[i].color,
+        };
         e_apply_per_object_ubo(e, &per_object);
-        glUseProgram(s->shader);
+        glUseProgram(s->light_source_shader);
         r_vb_draw(&s->light_source_vb);
     }
 }
