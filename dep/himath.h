@@ -6,6 +6,9 @@
 #endif //__cpluspllus
 
 #define HIMATH_PI 3.141592f
+#define HIMATH_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define HIMATH_MAX(a, b) ((a) > (b) ? (a) : (b))
+#define HIMATH_CLAMP(v, l, h) HIMATH_MIN(h, HIMATH_MAX(v, l))
 
 #ifdef __CUDACC__
 #define HIMATH_ATTRIB __host__ __device__
