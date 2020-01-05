@@ -87,7 +87,7 @@ vec3 phong_directional_light_color(PhongLight light,
     vec3 diffuse = light.diffuse * kd * max(dot(n, l), 0);
 
     vec3 v = normalize(view_pos - frag_pos);
-    vec3 r = reflect(-l, n);
+    vec3 r = reflect(l, n);
     float spec = pow(max(dot(v, r), 0), ns);
     vec3 specular = light.specular * ks * spec;
 
@@ -104,7 +104,7 @@ vec3 phong_point_light_color(PhongLight light,
     vec3 diffuse = light.diffuse * kd * max(dot(n, l), 0);
 
     vec3 v = normalize(view_pos - frag_pos);
-    vec3 r = reflect(-l, n);
+    vec3 r = reflect(l, n);
     float spec = pow(max(dot(v, r), 0), ns);
     vec3 specular = light.specular * ks * spec;
 
