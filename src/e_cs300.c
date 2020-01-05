@@ -9,10 +9,11 @@
 #include <math.h>
 
 #define MAX_MODEL_FILES_COUNT 100
-#define MAX_LIGHT_SOURCES_COUNT 100
+#define MAX_LIGHT_SOURCES_COUNT 10
 
 typedef struct LightSource_
 {
+    FVec3 pos;
     FVec3 color;
 } LightSource;
 
@@ -64,6 +65,58 @@ static void try_switch_model(CS300* s, int new_model_index)
 
         rc_mesh_load_from_obj(
             &s->model_mesh, s->model_file_paths[new_model_index].abs_path_str);
+        // Need to compute normals manually
+        if (fvec3_length_sq(s->model_mesh.vertices[0].normal) == 0.f)
+        {
+            if (s->model_mesh.indices_count != 0)
+            {
+                for (int i = 0; i < s->model_mesh.indices_count; i += 3)
+                {
+                    Vertex* v0 =
+                        &s->model_mesh.vertices[s->model_mesh.indices[i]];
+                    Vertex* v1 =
+                        &s->model_mesh.vertices[s->model_mesh.indices[i + 1]];
+                    Vertex* v2 =
+                        &s->model_mesh.vertices[s->model_mesh.indices[i + 2]];
+
+                    FVec3 e0 = fvec3_sub(v1->pos, v0->pos);
+                    FVec3 e1 = fvec3_sub(v2->pos, v0->pos);
+
+                    // Normal with weight
+                    FVec3 weight = fvec3_cross(e0, e1);
+
+                    v0->normal = fvec3_add(v0->normal, weight);
+                    v1->normal = fvec3_add(v1->normal, weight);
+                    v2->normal = fvec3_add(v2->normal, weight);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < s->model_mesh.vertices_count; i += 3)
+                {
+                    Vertex* v0 = &s->model_mesh.vertices[i];
+                    Vertex* v1 = &s->model_mesh.vertices[i + 1];
+                    Vertex* v2 = &s->model_mesh.vertices[i + 2];
+
+                    FVec3 e0 = fvec3_sub(v1->pos, v0->pos);
+                    FVec3 e1 = fvec3_sub(v2->pos, v0->pos);
+
+                    // Normal with weight
+                    FVec3 weight = fvec3_cross(e0, e1);
+
+                    v0->normal = fvec3_add(v0->normal, weight);
+                    v1->normal = fvec3_add(v1->normal, weight);
+                    v2->normal = fvec3_add(v2->normal, weight);
+                }
+            }
+
+            for (int i = 0; i < s->model_mesh.vertices_count; i++)
+            {
+                Vertex* v = &s->model_mesh.vertices[i];
+                v->normal = fvec3_normalize(v->normal);
+            }
+        }
+
         FVec3 bb_min = s->model_mesh.vertices[0].pos;
         FVec3 bb_max = s->model_mesh.vertices[0].pos;
         for (int j = 1; j < s->model_mesh.vertices_count; j++)
@@ -119,11 +172,11 @@ EXAMPLE_INIT_FN_SIG(cs300)
 
     s->current_model_index = -1;
     try_switch_model(s, 0);
-    s->model_shader = e_shader_load(e, "debug");
+    s->model_shader = e_shader_load(e, "phong");
 
     s->light_source_mesh = rc_mesh_make_sphere(0.05f, 32, 32);
     r_vb_init(&s->light_source_vb, &s->light_source_mesh, GL_TRIANGLES);
-    s->light_sources_count = 10;
+    s->light_sources_count = 1;
 
     // Smoothly interpolate from red to green to blue
     for (int i = 0; i < s->light_sources_count; i++)
@@ -145,12 +198,18 @@ EXAMPLE_INIT_FN_SIG(cs300)
         s->light_sources[i].color.z = b;
     }
 
+    s->light_sources[0].color = (FVec3){
+        .x = 0,
+        .y = 0,
+        .z = 1,
+    };
+
     s->light_source_shader = e_shader_load(e, "light_source");
 
     s->orbit_speed_deg = 30;
     s->orbit_radius = 0.5f;
 
-    s->camera_distance = 3;
+    s->camera_distance = 2;
 
     return e;
 }
@@ -197,6 +256,27 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
     igEndMainMenuBar();
 
     ExamplePerFrameUBO per_frame = {0};
+    per_frame.phong_lights_count = s->light_sources_count;
+    for (int i = 0; i < s->light_sources_count; i++)
+    {
+        float deg = ((360.f / (float)s->light_sources_count) * (float)i +
+                     s->t * s->orbit_speed_deg);
+        float rad = degtorad(deg);
+        FVec3 pos = {
+            .x = cosf(rad) * s->orbit_radius,
+            .z = sinf(rad) * s->orbit_radius,
+        };
+        s->light_sources[i].pos = pos;
+
+        FVec3 color = s->light_sources[i].color;
+        per_frame.phong_lights[i].type = ExamplePhongLightType_Point;
+        per_frame.phong_lights[i].pos_or_dir = s->light_sources[i].pos;
+        per_frame.phong_lights[i].ambient = fvec3_mulf(color, 0.1f);
+        per_frame.phong_lights[i].diffuse = color;
+        per_frame.phong_lights[i].specular = color;
+        per_frame.phong_lights[i].linear = 0.09f;
+        per_frame.phong_lights[i].quadratic = 0.032f;
+    }
     per_frame.proj = mat4_persp(
         60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
         100);
@@ -214,8 +294,11 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
     {
         ExamplePerObjectUBO per_object = {0};
         Mat4 scale_mat = mat4_scale(s->model_scale);
+#if 0
         Mat4 rot_mat =
             quat_to_matrix(quat_rotate((FVec3){0, 1, 0}, 90.f * s->t));
+#endif
+        Mat4 rot_mat = mat4_identity();
         Mat4 trans_mat = mat4_translation(s->model_pos);
         per_object.model = mat4_mul(&trans_mat, &scale_mat);
         per_object.model = mat4_mul(&rot_mat, &per_object.model);
@@ -226,15 +309,7 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
 
     for (int i = 0; i < s->light_sources_count; i++)
     {
-        float deg = ((360.f / (float)s->light_sources_count) * (float)i +
-                     s->t * s->orbit_speed_deg);
-        float rad = degtorad(deg);
-        FVec3 pos = {
-            .x = cosf(rad) * s->orbit_radius,
-            .z = sinf(rad) * s->orbit_radius,
-        };
-
-        Mat4 trans_mat = mat4_translation(pos);
+        Mat4 trans_mat = mat4_translation(s->light_sources[i].pos);
         ExamplePerObjectUBO per_object = {
             .model = trans_mat,
             .color = s->light_sources[i].color,
