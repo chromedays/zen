@@ -227,46 +227,115 @@ bool rc_mesh_load_from_obj(Mesh* mesh, const char* filename)
                 {
                     int vertices_count = 0;
 
-                    int face_offset = 0;
-                    for (uint i = 0; i < attrib.num_face_num_verts; ++i)
+                    // There is no multiple kinds of indices in a face.
+                    // In this case we can use index buffer
+                    if ((attrib.num_texcoords == 0) &&
+                        (attrib.num_normals == 0))
                     {
-                        ASSERT(attrib.face_num_verts[i] ==
-                               3); // All faces must be triangles
+                        uint* indices = (uint*)malloc(
+                            attrib.num_face_num_verts * 3 * sizeof(uint));
+                        int indices_count = 0;
 
-                        for (int offset = 0; offset < attrib.face_num_verts[i];
-                             ++offset)
+                        int face_offset = 0;
+
+                        for (uint i = 0; i < attrib.num_vertices; i++)
                         {
-                            tinyobj_vertex_index_t vi =
-                                attrib.faces[face_offset + offset];
+                            Vertex vertex = {
+                                .pos =
+                                    {
+                                        attrib.vertices[i * 3],
+                                        attrib.vertices[i * 3 + 1],
+                                        attrib.vertices[i * 3 + 2],
+                                    },
+                            };
 
-                            Vertex v = {0};
-                            v.pos.x = attrib.vertices[vi.v_idx * 3];
-                            v.pos.y = attrib.vertices[vi.v_idx * 3 + 1];
-                            v.pos.z = attrib.vertices[vi.v_idx * 3 + 2];
-                            if (attrib.num_texcoords > 0)
-                            {
-                                v.uv.x = attrib.texcoords[vi.vt_idx * 2];
-                                v.uv.y = attrib.texcoords[vi.vt_idx * 2 + 1];
-                            }
-                            if (attrib.num_normals > 0)
-                            {
-                                v.normal.x = attrib.normals[vi.vn_idx * 3];
-                                v.normal.y = attrib.normals[vi.vn_idx * 3 + 1];
-                                v.normal.z = attrib.normals[vi.vn_idx * 3 + 2];
-                            }
-                            vertices[vertices_count++] = v;
+                            vertices[vertices_count++] = vertex;
                         }
 
-                        face_offset += attrib.face_num_verts[i];
+                        for (uint i = 0; i < attrib.num_face_num_verts; i++)
+                        {
+                            ASSERT(attrib.face_num_verts[i] ==
+                                   3); // All faces must be triangles
+
+                            tinyobj_vertex_index_t indices_src[3] = {
+                                attrib.faces[face_offset],
+                                attrib.faces[face_offset + 1],
+                                attrib.faces[face_offset + 2],
+                            };
+
+                            indices[indices_count++] =
+                                (uint)indices_src[0].v_idx;
+                            ASSERT((int)indices[indices_count - 1] <
+                                   vertices_count);
+                            indices[indices_count++] =
+                                (uint)indices_src[1].v_idx;
+                            ASSERT((int)indices[indices_count - 1] <
+                                   vertices_count);
+                            indices[indices_count++] =
+                                (uint)indices_src[2].v_idx;
+                            ASSERT((int)indices[indices_count - 1] <
+                                   vertices_count);
+
+                            face_offset += 3;
+                        }
+
+                        ASSERT(indices_count ==
+                               (int)attrib.num_face_num_verts * 3);
+
+                        mesh->vertices = vertices;
+                        mesh->vertices_count = vertices_count;
+                        mesh->indices = indices;
+                        mesh->indices_count = indices_count;
                     }
+                    else
+                    {
+                        int face_offset = 0;
+                        for (uint i = 0; i < attrib.num_face_num_verts; ++i)
+                        {
+                            ASSERT(attrib.face_num_verts[i] ==
+                                   3); // All faces must be triangles
 
-                    ASSERT(vertices_count == (int)attrib.num_faces);
+                            for (int offset = 0;
+                                 offset < attrib.face_num_verts[i]; ++offset)
+                            {
+                                tinyobj_vertex_index_t vi =
+                                    attrib.faces[face_offset + offset];
 
-                    mesh->vertices = vertices;
-                    mesh->vertices_count = vertices_count;
-                    ASSERT(!mesh->indices);
-                    mesh->indices = NULL;
-                    mesh->indices_count = 0;
+                                Vertex v = {0};
+                                v.pos.x = attrib.vertices[vi.v_idx * 3];
+                                v.pos.y = attrib.vertices[vi.v_idx * 3 + 1];
+                                v.pos.z = attrib.vertices[vi.v_idx * 3 + 2];
+
+                                if (attrib.num_texcoords > 0)
+                                {
+                                    v.uv.x = attrib.texcoords[vi.vt_idx * 2];
+                                    v.uv.y =
+                                        attrib.texcoords[vi.vt_idx * 2 + 1];
+                                }
+
+                                if (attrib.num_normals > 0)
+                                {
+                                    v.normal.x = attrib.normals[vi.vn_idx * 3];
+                                    v.normal.y =
+                                        attrib.normals[vi.vn_idx * 3 + 1];
+                                    v.normal.z =
+                                        attrib.normals[vi.vn_idx * 3 + 2];
+                                }
+
+                                vertices[vertices_count++] = v;
+                            }
+
+                            face_offset += attrib.face_num_verts[i];
+                        }
+
+                        ASSERT(vertices_count == (int)attrib.num_faces);
+
+                        mesh->vertices = vertices;
+                        mesh->vertices_count = vertices_count;
+                        ASSERT(!mesh->indices);
+                        mesh->indices = NULL;
+                        mesh->indices_count = 0;
+                    }
 
                     result = true;
                 }
