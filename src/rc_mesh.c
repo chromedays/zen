@@ -197,6 +197,7 @@ Mesh rc_mesh_make_sphere(float radius, int slices_count, int stacks_count)
 bool rc_mesh_load_from_obj(Mesh* mesh, const char* filename)
 {
     bool result = false;
+    // TODO: use rc_reac_text_all
     FILE* f = fopen(filename, "r");
     if (f)
     {
