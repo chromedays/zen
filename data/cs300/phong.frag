@@ -12,35 +12,7 @@ out vec3 out_color;
 
 void main()
 {
-    vec3 n = normalize(normal_world);
-
-    //out_color = texture(SPECULAR_MAP, uv).rgb;
-    vec3 color = vec3(0);
-
-    for (int i = 0; i < u_phong_lights_count; i++)
-    {
-        PhongLight light = u_phong_lights[i];
-        vec3 ka = vec3(0.1);
-        vec3 kd = vec3(0.9, 0.9, 0.9);
-        vec3 ks = vec3(0.9, 0.9, 0.9);
-        //vec3 kd = texture(DIFFUSE_MAP, uv).rgb;
-        //vec3 ks = texture(SPECULAR_MAP, uv).rgb;
-        float ns = 32;
-        if (light.type == 1)
-        {
-            color += phong_directional_light_color(
-                light, n, u_view_pos, pos_world,
-                ka, kd, ks, ns);
-        }
-        else if (light.type == 2)
-        {
-            color += phong_point_light_color(
-                light, n, u_view_pos, pos_world,
-                ka, kd, ks, ns);
-        }
-    }
-
+    vec3 color = calc_phong(normal_world, pos_world);
     out_color = color;
-
     // out_color = (normalize(normal_world) + vec3(1)) * 0.5;
 }

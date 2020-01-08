@@ -106,3 +106,35 @@ vec3 phong_point_light_color(PhongLight light,
 
     return (ambient + diffuse + specular) * att;
 }
+
+vec3 calc_phong(vec3 normal, vec3 frag_pos)
+{
+    vec3 n = normalize(normal);
+
+    vec3 color = vec3(0);
+
+    for (int i = 0; i < u_phong_lights_count; i++)
+    {
+        PhongLight light = u_phong_lights[i];
+        vec3 ka = vec3(0.1);
+        vec3 kd = vec3(0.9, 0.9, 0.9);
+        vec3 ks = vec3(0.9, 0.9, 0.9);
+        //vec3 kd = texture(DIFFUSE_MAP, uv).rgb;
+        //vec3 ks = texture(SPECULAR_MAP, uv).rgb;
+        float ns = 32;
+        if (light.type == 1)
+        {
+            color += phong_directional_light_color(
+                light, n, u_view_pos, frag_pos,
+                ka, kd, ks, ns);
+        }
+        else if (light.type == 2)
+        {
+            color += phong_point_light_color(
+                light, n, u_view_pos, frag_pos,
+                ka, kd, ks, ns);
+        }
+    }
+
+    return color;
+}
