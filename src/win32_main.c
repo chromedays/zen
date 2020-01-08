@@ -48,7 +48,7 @@ int CALLBACK WinMain(HINSTANCE instance,
 
     Scene scene = {0};
     s_init(&scene, &input);
-    s_switch_scene(&scene, EXAMPLE_LITERAL(cs300_1));
+    s_switch_scene(&scene, EXAMPLE_LITERAL(phong));
 
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
