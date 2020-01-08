@@ -29,6 +29,8 @@ typedef struct CS300_
     float model_scale;
     uint model_shader;
 
+    uint normal_debug_shader;
+
     Mesh light_source_mesh;
     VertexBuffer light_source_vb;
     LightSource light_sources[MAX_LIGHT_SOURCES_COUNT];
@@ -174,9 +176,11 @@ EXAMPLE_INIT_FN_SIG(cs300)
     try_switch_model(s, 0);
     s->model_shader = e_shader_load(e, "phong");
 
+    s->normal_debug_shader = e_shader_load(e, "visualize_normals");
+
     s->light_source_mesh = rc_mesh_make_sphere(0.05f, 32, 32);
     r_vb_init(&s->light_source_vb, &s->light_source_mesh, GL_TRIANGLES);
-    s->light_sources_count = 1;
+    s->light_sources_count = 10;
 
     // Smoothly interpolate from red to green to blue
     for (int i = 0; i < s->light_sources_count; i++)
@@ -197,12 +201,6 @@ EXAMPLE_INIT_FN_SIG(cs300)
         s->light_sources[i].color.y = g;
         s->light_sources[i].color.z = b;
     }
-
-    s->light_sources[0].color = (FVec3){
-        .x = 0,
-        .y = 0,
-        .z = 1,
-    };
 
     s->light_source_shader = e_shader_load(e, "light_source");
 
