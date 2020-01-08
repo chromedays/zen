@@ -1,5 +1,6 @@
 #include "resource.h"
 #include "debug.h"
+#include <histr.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -34,74 +35,91 @@ static GLuint
     rc_shader_compile(GLenum type, const char** sources, int sources_count);
 static GLuint rc_shader_link(GLuint* shaders, int shaders_count);
 
-GLuint rc_shader_load_from_files(const char* vs_filename,
-                                 const char* fs_filename,
-                                 const char* cs_filename,
-                                 const char** include_filenames,
-                                 int includes_count)
+histr_String rc_read_multiple_text_files_at_once(const char** filenames,
+                                                 int filenames_count)
 {
-    char* vs_src = rc_read_text_file_all(vs_filename);
-    char* fs_src = rc_read_text_file_all(fs_filename);
-    char* cs_src = rc_read_text_file_all(cs_filename);
-    char** includes = malloc(includes_count * sizeof(const char*));
-
-    for (int i = 0; i < includes_count; i++)
-        includes[i] = rc_read_text_file_all(include_filenames[i]);
-
-    GLuint result = rc_shader_load_from_source(vs_src, fs_src, cs_src, includes,
-                                               includes_count);
-
-    if (vs_src)
-        free(vs_src);
-    if (fs_src)
-        free(fs_src);
-    if (cs_src)
-        free(cs_src);
-    for (int i = 0; i < includes_count; i++)
+    histr_String result = NULL;
+    if (filenames_count > 0)
     {
-        if (includes[i])
-            free(includes[i]);
+        result = histr_make();
+        for (int i = 0; i < filenames_count; i++)
+        {
+            char* text = rc_read_text_file_all(filenames[i]);
+            if (text)
+            {
+                histr_append(result, text);
+                free(text);
+            }
+            else
+            {
+                PRINTLN("Can't load %s: The file doesn't exist", filenames[i]);
+                histr_destroy(result);
+                result = NULL;
+                break;
+            }
+        }
     }
 
-    free(includes);
+    return result;
+}
+
+GLuint rc_shader_load_from_files(ShaderLoadDesc vs_desc,
+                                 ShaderLoadDesc fs_desc,
+                                 ShaderLoadDesc gs_desc,
+                                 ShaderLoadDesc cs_desc)
+{
+    histr_String vs_src = rc_read_multiple_text_files_at_once(
+        vs_desc.filenames, vs_desc.filenames_count);
+    histr_String fs_src = rc_read_multiple_text_files_at_once(
+        fs_desc.filenames, fs_desc.filenames_count);
+    histr_String gs_src = rc_read_multiple_text_files_at_once(
+        gs_desc.filenames, gs_desc.filenames_count);
+    histr_String cs_src = rc_read_multiple_text_files_at_once(
+        cs_desc.filenames, cs_desc.filenames_count);
+
+    GLuint result = rc_shader_load_from_source(vs_src, fs_src, gs_src, cs_src);
+
+    histr_destroy(vs_src);
+    histr_destroy(fs_src);
+    histr_destroy(gs_src);
+    histr_destroy(cs_src);
 
     return result;
 }
 
 GLuint rc_shader_load_from_source(const char* vs_src,
                                   const char* fs_src,
-                                  const char* cs_src,
-                                  const char** includes,
-                                  int includes_count)
+                                  const char* gs_src,
+                                  const char* cs_src)
 {
     GLuint result = 0;
 
-    int sources_count = includes_count + 1;
-    const char** sources =
-        (const char**)malloc(sources_count * sizeof(const char*));
-    memcpy((void*)sources, (void*)includes,
-           includes_count * sizeof(const char*));
-
     int shaders_count = 0;
-    GLuint shaders[3] = {0};
+    GLuint shaders[4] = {0};
 
-    if (vs_src)
+    if (vs_src && vs_src[0] != '\0')
     {
-        sources[includes_count] = vs_src;
+        PRINTLN("Compiling vertex shader...");
         shaders[shaders_count++] =
-            rc_shader_compile(GL_VERTEX_SHADER, sources, sources_count);
+            rc_shader_compile(GL_VERTEX_SHADER, &vs_src, 1);
     }
-    if (fs_src)
+    if (fs_src && fs_src[0] != '\0')
     {
-        sources[includes_count] = fs_src;
+        PRINTLN("Compiling fragment shader...");
         shaders[shaders_count++] =
-            rc_shader_compile(GL_FRAGMENT_SHADER, sources, sources_count);
+            rc_shader_compile(GL_FRAGMENT_SHADER, &fs_src, 1);
     }
-    if (cs_src)
+    if (gs_src && gs_src[0] != '\0')
     {
-        sources[includes_count] = cs_src;
+        PRINTLN("Compiling geometry shader...");
         shaders[shaders_count++] =
-            rc_shader_compile(GL_COMPUTE_SHADER, sources, sources_count);
+            rc_shader_compile(GL_GEOMETRY_SHADER, &gs_src, 1);
+    }
+    if (cs_src && cs_src[0] != '\0')
+    {
+        PRINTLN("Compiling compute shader...");
+        shaders[shaders_count++] =
+            rc_shader_compile(GL_COMPUTE_SHADER, &cs_src, 1);
     }
 
     if (shaders_count > 0)
@@ -111,8 +129,6 @@ GLuint rc_shader_load_from_source(const char* vs_src,
         for (int i = 0; i < shaders_count; ++i)
             glDeleteShader(shaders[i]);
     }
-
-    free((void*)sources);
 
     return result;
 }

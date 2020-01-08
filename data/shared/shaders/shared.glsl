@@ -1,9 +1,3 @@
-#version 460 core
-
-layout (location = 0) in vec3 v_pos;
-layout (location = 1) in vec2 v_uv;
-layout (location = 2) in vec3 v_normal;
-
 struct PhongLight
 {
     int type;
@@ -49,6 +43,11 @@ vec3 model_to_world_vector(vec3 v)
     return mat3(transpose(inverse(u_model))) * v;
 }
 
+vec3 model_to_view_vector(vec3 v)
+{
+    return mat3(transpose(inverse(u_view * u_model))) * v;
+}
+
 mat4 mvp()
 {
     return u_proj * u_view * u_model;
@@ -57,11 +56,6 @@ mat4 mvp()
 vec3 unlit_color()
 {
     return u_color;
-}
-
-vec4 transformed_vertex()
-{
-    return mvp() * vec4(v_pos, 1);
 }
 
 float phong_attenutation(PhongLight light, vec3 pos)

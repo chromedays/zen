@@ -1,5 +1,7 @@
 #include "example.h"
 #include "resource.h"
+#include "filesystem.h"
+#include "debug.h"
 #include <histr.h>
 #include <stb_image.h>
 #include <stdlib.h>
@@ -37,22 +39,94 @@ void e_example_destroy(Example* e)
 
 GLuint e_shader_load(const Example* e, const char* shader_name)
 {
-    const char* shared_src_path = "shared/shaders/shared.glsl";
+    PRINTLN("Building shader (%s)...", shader_name);
 
-    histr_String filename_base = histr_makestr(e->name);
-    histr_append(filename_base, "/");
-    histr_append(filename_base, shader_name);
+    Path shared_root_path = fs_path_make_working_dir();
+    fs_path_append2(&shared_root_path, "shared", "shaders");
 
-    histr_String vs_filename = histr_makestr(filename_base);
-    histr_append(vs_filename, ".vert");
-    histr_String fs_filename = histr_makestr(filename_base);
-    histr_append(fs_filename, ".frag");
-    GLuint result = rc_shader_load_from_files(vs_filename, fs_filename, NULL,
-                                              &shared_src_path, 1);
+    Path shared_version_path = fs_path_copy(shared_root_path);
+    fs_path_append(&shared_version_path, "version.glsl");
 
-    histr_destroy(filename_base);
-    histr_destroy(vs_filename);
-    histr_destroy(fs_filename);
+    Path shared_vertex_input_path = fs_path_copy(shared_root_path);
+    fs_path_append(&shared_vertex_input_path, "vertex_input.glsl");
+
+    Path shared_shared_path = fs_path_copy(shared_root_path);
+    fs_path_append(&shared_shared_path, "shared.glsl");
+
+    Path shared_vs_shared_path = fs_path_copy(shared_root_path);
+    fs_path_append(&shared_vs_shared_path, "vs_shared.glsl");
+
+    Path example_shader_root_path = fs_path_make_working_dir();
+    fs_path_append(&example_shader_root_path, e->name);
+
+    Path vs_filepath = fs_path_copy(example_shader_root_path);
+    {
+        histr_String vs_filename = histr_makestr(shader_name);
+        histr_append(vs_filename, ".vert");
+        fs_path_append(&vs_filepath, vs_filename);
+        histr_destroy(vs_filename);
+    }
+
+    ShaderLoadDesc vs_desc = {
+        .filenames =
+            {
+                shared_version_path.abs_path_str,
+                shared_vertex_input_path.abs_path_str,
+                shared_shared_path.abs_path_str,
+                shared_vs_shared_path.abs_path_str,
+                vs_filepath.abs_path_str,
+            },
+        .filenames_count = 5,
+    };
+
+    Path fs_filepath = fs_path_copy(example_shader_root_path);
+    {
+        histr_String fs_filename = histr_makestr(shader_name);
+        histr_append(fs_filename, ".frag");
+        fs_path_append(&fs_filepath, fs_filename);
+        histr_destroy(fs_filename);
+    }
+
+    ShaderLoadDesc fs_desc = {
+        .filenames =
+            {
+                shared_version_path.abs_path_str,
+                shared_shared_path.abs_path_str,
+                fs_filepath.abs_path_str,
+            },
+        .filenames_count = 3,
+    };
+
+    Path gs_filepath = fs_path_copy(example_shader_root_path);
+    {
+        histr_String gs_filename = histr_makestr(shader_name);
+        histr_append(gs_filename, ".geom");
+        fs_path_append(&gs_filepath, gs_filename);
+        histr_destroy(gs_filename);
+    }
+
+    ShaderLoadDesc gs_desc = {
+        .filenames =
+            {
+                shared_version_path.abs_path_str,
+                shared_shared_path.abs_path_str,
+                gs_filepath.abs_path_str,
+            },
+        .filenames_count = 3,
+    };
+
+    GLuint result = rc_shader_load_from_files(vs_desc, fs_desc, gs_desc,
+                                              (ShaderLoadDesc){0});
+
+    fs_path_cleanup(&gs_filepath);
+    fs_path_cleanup(&fs_filepath);
+    fs_path_cleanup(&vs_filepath);
+    fs_path_cleanup(&example_shader_root_path);
+    fs_path_cleanup(&shared_vs_shared_path);
+    fs_path_cleanup(&shared_shared_path);
+    fs_path_cleanup(&shared_vertex_input_path);
+    fs_path_cleanup(&shared_version_path);
+    fs_path_cleanup(&shared_root_path);
 
     return result;
 }
