@@ -6,16 +6,24 @@
 #include <glad/glad.h>
 #include <himath.h>
 
-GLuint rc_shader_load_from_files(const char* vs_filename,
-                                 const char* fs_filename,
-                                 const char* cs_filename,
-                                 const char** include_filename,
-                                 int includes_count);
+#define SHADER_LOAD_DESC_MAX_FILES_COUNT 10
+
+typedef struct ShaderLoadDesc_
+{
+    const char* filenames[SHADER_LOAD_DESC_MAX_FILES_COUNT];
+    int filenames_count;
+} ShaderLoadDesc;
+
+GLuint rc_shader_load_from_files(ShaderLoadDesc vs_desc,
+                                 ShaderLoadDesc fs_desc,
+                                 ShaderLoadDesc gs_desc,
+                                 ShaderLoadDesc cs_desc);
 GLuint rc_shader_load_from_source(const char* vs_src,
                                   const char* fs_src,
-                                  const char* cs_src,
-                                  const char** includes,
-                                  int includes_count);
+                                  const char* gs_src,
+                                  const char* cs_src
+
+);
 
 typedef struct Mesh_
 {
