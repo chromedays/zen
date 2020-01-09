@@ -45,6 +45,7 @@ int CALLBACK WinMain(HINSTANCE instance,
 
     Input input = {0};
     win32_register_input(&input);
+    win32_update_input(&app);
 
     Scene scene = {0};
     s_init(&scene, &input);
