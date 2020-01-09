@@ -19,12 +19,21 @@ typedef struct LightSource_
 
 typedef struct GBuffer_
 {
+    IVec2 dim;
     uint framebuffer;
     uint position_texture;
     uint normal_texture;
     uint albedo_texture;
     uint depth_stencil_buffer;
 } GBuffer;
+
+typedef enum DrawMode_
+{
+    DrawMode_FinalScene = 0,
+    DrawMode_PositionMap,
+    DrawMode_NormalMap,
+    DrawMode_AlbedoMap,
+} DrawMode;
 
 typedef struct CS300_
 {
@@ -61,6 +70,8 @@ typedef struct CS300_
     GBuffer gbuffer;
     uint deferred_first_pass_shader;
     uint deferred_second_pass_shader;
+
+    DrawMode draw_mode;
 } CS300;
 
 static FILE_FOREACH_FN_DECL(push_model_filename)
@@ -240,13 +251,14 @@ EXAMPLE_INIT_FN_SIG(cs300)
     r_vb_init(&s->fsq_vb, &s->fsq_mesh, GL_TRIANGLES);
     s->fsq_shader = e_shader_load(e, "fsq");
 
+    s->gbuffer.dim = input->window_size;
     glGenFramebuffers(1, &s->gbuffer.framebuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, s->gbuffer.framebuffer);
 
     glGenTextures(1, &s->gbuffer.position_texture);
     glBindTexture(GL_TEXTURE_2D, s->gbuffer.position_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, input->window_size.x,
-                 input->window_size.y, 0, GL_RGB, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, s->gbuffer.dim.x,
+                 s->gbuffer.dim.y, 0, GL_RGB, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
@@ -254,8 +266,8 @@ EXAMPLE_INIT_FN_SIG(cs300)
 
     glGenTextures(1, &s->gbuffer.normal_texture);
     glBindTexture(GL_TEXTURE_2D, s->gbuffer.normal_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, input->window_size.x,
-                 input->window_size.y, 0, GL_RGB, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, s->gbuffer.dim.x,
+                 s->gbuffer.dim.y, 0, GL_RGB, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D,
@@ -263,8 +275,8 @@ EXAMPLE_INIT_FN_SIG(cs300)
 
     glGenTextures(1, &s->gbuffer.albedo_texture);
     glBindTexture(GL_TEXTURE_2D, s->gbuffer.albedo_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, input->window_size.x,
-                 input->window_size.y, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, s->gbuffer.dim.x,
+                 s->gbuffer.dim.y, 0, GL_RGBA, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D,
@@ -277,7 +289,7 @@ EXAMPLE_INIT_FN_SIG(cs300)
     glGenRenderbuffers(1, &s->gbuffer.depth_stencil_buffer);
     glBindRenderbuffer(GL_RENDERBUFFER, s->gbuffer.depth_stencil_buffer);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
-                          input->window_size.x, input->window_size.y);
+                          s->gbuffer.dim.x, s->gbuffer.dim.y);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
                               GL_RENDERBUFFER, s->gbuffer.depth_stencil_buffer);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
@@ -326,6 +338,139 @@ EXAMPLE_CLEANUP_FN_SIG(cs300)
     free(e);
 }
 
+static void update_light_source_transforms(CS300* s)
+{
+    for (int i = 0; i < s->light_sources_count; i++)
+    {
+        float deg = ((360.f / (float)s->light_sources_count) * (float)i +
+                     s->t * s->orbit_speed_deg);
+        float rad = degtorad(deg);
+        FVec3 pos = {
+            .x = cosf(rad) * s->orbit_radius,
+            .z = sinf(rad) * s->orbit_radius,
+        };
+        s->light_sources[i].pos = pos;
+    }
+}
+
+void prepare_per_frame(Example* e, const CS300* s, const Input* input)
+{
+    ExamplePerFrameUBO per_frame = {0};
+    per_frame.phong_lights_count = s->light_sources_count;
+    for (int i = 0; i < s->light_sources_count; i++)
+    {
+        FVec3 color = s->light_sources[i].color;
+        per_frame.phong_lights[i].type = ExamplePhongLightType_Point;
+        per_frame.phong_lights[i].pos_or_dir = s->light_sources[i].pos;
+        per_frame.phong_lights[i].ambient = fvec3_mulf(color, 0.1f);
+        per_frame.phong_lights[i].diffuse = color;
+        per_frame.phong_lights[i].specular = color;
+        per_frame.phong_lights[i].linear = 0.09f;
+        per_frame.phong_lights[i].quadratic = 0.032f;
+    }
+    per_frame.proj = mat4_persp(
+        60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
+        100);
+    per_frame.view = mat4_lookat((FVec3){0, 1, s->camera_distance}, (FVec3){0},
+                                 (FVec3){0, 1, 0});
+    e_apply_per_frame_ubo(e, &per_frame);
+}
+
+static void draw_deferred_objects(Example* e, const CS300* s)
+{
+    // First pass
+    glBindFramebuffer(GL_FRAMEBUFFER, s->gbuffer.framebuffer);
+    glClearColor(0, 0, 0, 0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
+
+    if (s->current_model_index >= 0)
+    {
+        ExamplePerObjectUBO per_object = {0};
+        Mat4 scale_mat = mat4_scale(s->model_scale);
+#if 0
+        Mat4 rot_mat =
+            quat_to_matrix(quat_rotate((FVec3){0, 1, 0}, 90.f * s->t));
+#else
+        Mat4 rot_mat = mat4_identity();
+#endif
+        Mat4 trans_mat = mat4_translation(s->model_pos);
+        per_object.model = mat4_mul(&trans_mat, &scale_mat);
+        per_object.model = mat4_mul(&rot_mat, &per_object.model);
+        e_apply_per_object_ubo(e, &per_object);
+        glUseProgram(s->deferred_first_pass_shader);
+        r_vb_draw(&s->model_vb);
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // Second pass
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    switch (s->draw_mode)
+    {
+    case DrawMode_FinalScene: {
+        uint textures[] = {
+            s->gbuffer.position_texture,
+            s->gbuffer.normal_texture,
+            s->gbuffer.albedo_texture,
+        };
+        glBindTextures(0, ARRAY_LENGTH(textures), textures);
+        glUseProgram(s->deferred_second_pass_shader);
+        r_vb_draw(&s->fsq_vb);
+    }
+    break;
+    case DrawMode_PositionMap:
+        glBindTextures(0, 1, &s->gbuffer.position_texture);
+        glUseProgram(s->fsq_shader);
+        r_vb_draw(&s->fsq_vb);
+        break;
+    case DrawMode_NormalMap:
+        glBindTextures(0, 1, &s->gbuffer.normal_texture);
+        glUseProgram(s->fsq_shader);
+        r_vb_draw(&s->fsq_vb);
+        break;
+    case DrawMode_AlbedoMap:
+        glBindTextures(0, 1, &s->gbuffer.albedo_texture);
+        glUseProgram(s->fsq_shader);
+        r_vb_draw(&s->fsq_vb);
+        break;
+    }
+}
+
+static void copy_depth_buffer(const CS300* s, IVec2 window_size)
+{
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    // Copy depth buffer written from deferred rendering pass
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, s->gbuffer.framebuffer);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBlitFramebuffer(0, 0, s->gbuffer.dim.x, s->gbuffer.dim.y, 0, 0,
+                      window_size.x, window_size.y, GL_DEPTH_BUFFER_BIT,
+                      GL_NEAREST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+}
+
+static void draw_debug_objects(Example* e, const CS300* s)
+{
+    // Draw debug objects (e.g. light sources) in forward rendering
+    for (int i = 0; i < s->light_sources_count; i++)
+    {
+        Mat4 trans_mat = mat4_translation(s->light_sources[i].pos);
+        ExamplePerObjectUBO per_object = {
+            .model = trans_mat,
+            .color = s->light_sources[i].color,
+        };
+        e_apply_per_object_ubo(e, &per_object);
+        glUseProgram(s->light_source_shader);
+        r_vb_draw(&s->light_source_vb);
+    }
+}
+
 EXAMPLE_UPDATE_FN_SIG(cs300)
 {
     Example* e = (Example*)udata;
@@ -349,141 +494,33 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
 
     if (igBeginMenu("View Mode", true))
     {
+        if (igMenuItemBool("Final Scene", NULL, false, true))
+        {
+            s->draw_mode = DrawMode_FinalScene;
+        }
         if (igMenuItemBool("Position Map", NULL, false, true))
         {
+            s->draw_mode = DrawMode_PositionMap;
             s->fsq_target_texture = s->gbuffer.position_texture;
         }
         if (igMenuItemBool("Normal Map", NULL, false, true))
         {
+            s->draw_mode = DrawMode_NormalMap;
             s->fsq_target_texture = s->gbuffer.normal_texture;
         }
         if (igMenuItemBool("Albedo Map", NULL, false, true))
         {
+            s->draw_mode = DrawMode_AlbedoMap;
             s->fsq_target_texture = s->gbuffer.albedo_texture;
         }
-#if 0
-        if (igMenuItemBool("Depth Map", NULL, false, true))
-        {
-            s->fsq_target_texture = s->gbuffer.position_texture;
-        }
-#endif
         igEndMenu();
     }
 
     igEndMainMenuBar();
 
-    ExamplePerFrameUBO per_frame = {0};
-    per_frame.phong_lights_count = s->light_sources_count;
-    for (int i = 0; i < s->light_sources_count; i++)
-    {
-        float deg = ((360.f / (float)s->light_sources_count) * (float)i +
-                     s->t * s->orbit_speed_deg);
-        float rad = degtorad(deg);
-        FVec3 pos = {
-            .x = cosf(rad) * s->orbit_radius,
-            .z = sinf(rad) * s->orbit_radius,
-        };
-        s->light_sources[i].pos = pos;
-
-        FVec3 color = s->light_sources[i].color;
-        per_frame.phong_lights[i].type = ExamplePhongLightType_Point;
-        per_frame.phong_lights[i].pos_or_dir = s->light_sources[i].pos;
-        per_frame.phong_lights[i].ambient = fvec3_mulf(color, 0.1f);
-        per_frame.phong_lights[i].diffuse = color;
-        per_frame.phong_lights[i].specular = color;
-        per_frame.phong_lights[i].linear = 0.09f;
-        per_frame.phong_lights[i].quadratic = 0.032f;
-    }
-    per_frame.proj = mat4_persp(
-        60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
-        100);
-    per_frame.view = mat4_lookat((FVec3){0, 1, s->camera_distance}, (FVec3){0},
-                                 (FVec3){0, 1, 0});
-    e_apply_per_frame_ubo(e, &per_frame);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, s->gbuffer.framebuffer);
-    glClearColor(0, 0, 0, 1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);
-
-    if (s->current_model_index >= 0)
-    {
-        ExamplePerObjectUBO per_object = {0};
-        Mat4 scale_mat = mat4_scale(s->model_scale);
-#if 0
-        Mat4 rot_mat =
-            quat_to_matrix(quat_rotate((FVec3){0, 1, 0}, 90.f * s->t));
-#endif
-        Mat4 rot_mat = mat4_identity();
-        Mat4 trans_mat = mat4_translation(s->model_pos);
-        per_object.model = mat4_mul(&trans_mat, &scale_mat);
-        per_object.model = mat4_mul(&rot_mat, &per_object.model);
-        e_apply_per_object_ubo(e, &per_object);
-        // glUseProgram(s->model_shader);
-        glUseProgram(s->deferred_first_pass_shader);
-        r_vb_draw(&s->model_vb);
-    }
-
-#if 0
-    for (int i = 0; i < s->light_sources_count; i++)
-    {
-        Mat4 trans_mat = mat4_translation(s->light_sources[i].pos);
-        ExamplePerObjectUBO per_object = {
-            .model = trans_mat,
-            .color = s->light_sources[i].color,
-        };
-        e_apply_per_object_ubo(e, &per_object);
-        // glUseProgram(s->light_source_shader);
-        glUseProgram(s->deferred_first_pass_shader);
-        r_vb_draw(&s->light_source_vb);
-    }
-#endif
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    glClearColor(0.2f, 0.2f, 0.2f, 1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);
-#if 0
-    glBindTextures(0, 1, &s->fsq_target_texture);
-    glUseProgram(s->fsq_shader);
-    r_vb_draw(&s->fsq_vb);
-#endif
-
-    uint textures[] = {
-        s->gbuffer.position_texture,
-        s->gbuffer.normal_texture,
-        s->gbuffer.albedo_texture,
-    };
-    glBindTextures(0, ARRAY_LENGTH(textures), textures);
-    glUseProgram(s->deferred_second_pass_shader);
-    r_vb_draw(&s->fsq_vb);
-
-    glClear(GL_DEPTH_BUFFER_BIT);
-
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, s->gbuffer.framebuffer);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBlitFramebuffer(0, 0, input->window_size.x, input->window_size.y, 0, 0,
-                      input->window_size.x, input->window_size.y,
-                      GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-
-    for (int i = 0; i < s->light_sources_count; i++)
-    {
-        Mat4 trans_mat = mat4_translation(s->light_sources[i].pos);
-        ExamplePerObjectUBO per_object = {
-            .model = trans_mat,
-            .color = s->light_sources[i].color,
-        };
-        e_apply_per_object_ubo(e, &per_object);
-        glUseProgram(s->light_source_shader);
-        r_vb_draw(&s->light_source_vb);
-    }
+    update_light_source_transforms(s);
+    prepare_per_frame(e, s, input);
+    draw_deferred_objects(e, s);
+    copy_depth_buffer(s, input->window_size);
+    draw_debug_objects(e, s);
 }
