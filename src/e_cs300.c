@@ -476,8 +476,6 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
     Example* e = (Example*)udata;
     CS300* s = (CS300*)e->scene;
 
-    s->t += input->dt;
-
     igBeginMainMenuBar();
     if (igBeginMenu("Load Model", true))
     {
@@ -517,6 +515,8 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
     }
 
     igEndMainMenuBar();
+
+    s->t += input->dt;
 
     update_light_source_transforms(s);
     prepare_per_frame(e, s, input);
