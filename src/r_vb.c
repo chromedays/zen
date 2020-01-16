@@ -5,6 +5,8 @@
 
 void r_vb_init(VertexBuffer* vb, const Mesh* mesh, GLenum mode)
 {
+    *vb = (VertexBuffer){0};
+
     ASSERT(mesh->vertices);
     glGenVertexArrays(1, &vb->vao);
     glBindVertexArray(vb->vao);
