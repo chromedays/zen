@@ -129,6 +129,12 @@ HIMATH_ATTRIB Mat4 mat4_persp(float fov_y,
                               float aspect_ratio,
                               float near_z,
                               float far_z);
+HIMATH_ATTRIB Mat4 mat4_ortho(float right,
+                              float left,
+                              float top,
+                              float bottom,
+                              float near_z,
+                              float far_z);
 
 typedef struct Quat_
 {
@@ -551,6 +557,26 @@ HIMATH_ATTRIB Mat4 mat4_persp(float fov_y,
                    0.f, d,   0.f,   0.f,  //
                    0.f, 0.f, range, -1.f, //
                    0.f, 0.f, rnz,   0.f};
+    return result;
+}
+
+HIMATH_ATTRIB Mat4 mat4_ortho(float right,
+                              float left,
+                              float top,
+                              float bottom,
+                              float near_z,
+                              float far_z)
+{
+    // clang-format off
+    Mat4 result = {2.f / (right - left), 0.f, 0.f, 0.f, //
+                   0.f, 2.f / (top - bottom), 0.f, 0.f, //
+                   0.f, 0.f, -2.f / (far_z - near_z), -1.f, //
+                   -(right + left) / (right - left),
+                   -(top + bottom) / (top - bottom),
+                   -(far_z + near_z) / (far_z - near_z),
+                   1.f};
+    // clang-format on
+
     return result;
 }
 
