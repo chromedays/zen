@@ -8,6 +8,7 @@
 #include <himath.h>
 #include <math.h>
 #include <stdlib.h>
+#include "../game/src/game_scene.h"
 
 typedef struct Win32GlobalState_
 {
@@ -49,7 +50,11 @@ int CALLBACK WinMain(HINSTANCE instance,
 
     Scene scene = {0};
     s_init(&scene, &input);
-    s_switch_scene(&scene, EXAMPLE_LITERAL(phong));
+    s_switch_scene(&scene, (SceneCallbacks){
+                               .init = &gs_prototype_init,
+                               .cleanup = &gs_prototype_cleanup,
+                               .update = &gs_prototype_update,
+                           });
 
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);

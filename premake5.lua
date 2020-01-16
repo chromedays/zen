@@ -84,6 +84,7 @@ local function internal_simple_win32_cpp(name, static_libs, clang_format_path, p
             game.src_root .. '*.h',
             game.src_root .. '*.c',
         }
+        includedirs { src_root, game.dep_root }
 
         links(static_libs)
 
