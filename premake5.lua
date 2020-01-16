@@ -74,6 +74,17 @@ local function internal_simple_win32_cpp(name, static_libs, clang_format_path, p
             src_root .. '*.inl',
         }
 
+        -- Just for game project
+        local game = {}
+        game.root = 'game/'
+        game.src_root = game.root .. 'src/'
+        game.dep_root = game.root .. 'dep/'
+        game.wd_root = game.root .. 'data/'
+        files {
+            game.src_root .. '*.h',
+            game.src_root .. '*.c',
+        }
+
         links(static_libs)
 
         filter 'configurations:Debug'
