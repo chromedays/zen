@@ -72,6 +72,8 @@ typedef struct CS300_
     uint deferred_second_pass_shader;
 
     DrawMode draw_mode;
+
+    bool copy_depth;
 } CS300;
 
 static FILE_FOREACH_FN_DECL(push_model_filename)
@@ -197,8 +199,7 @@ EXAMPLE_INIT_FN_SIG(cs300)
 
     Path model_root_path = fs_path_make_working_dir();
     fs_path_append2(&model_root_path, "shared", "models");
-    fs_for_each_files_with_ext(&model_root_path, "obj", &push_model_filename,
-                               s);
+    fs_for_each_files_with_ext(model_root_path, "obj", &push_model_filename, s);
     fs_path_cleanup(&model_root_path);
 
     s->current_model_index = -1;
@@ -303,6 +304,8 @@ EXAMPLE_INIT_FN_SIG(cs300)
 
     s->deferred_second_pass_shader =
         e_shader_load(e, "phong_deferred_second_pass");
+
+    s->copy_depth = true;
 
     return e;
 }
@@ -439,12 +442,12 @@ static void draw_deferred_objects(Example* e, const CS300* s)
         r_vb_draw(&s->fsq_vb);
         break;
     }
+
+    glClear(GL_DEPTH_BUFFER_BIT);
 }
 
 static void copy_depth_buffer(const CS300* s, IVec2 window_size)
 {
-    glClear(GL_DEPTH_BUFFER_BIT);
-
     // Copy depth buffer written from deferred rendering pass
     glBindFramebuffer(GL_READ_FRAMEBUFFER, s->gbuffer.framebuffer);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -476,51 +479,63 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
     Example* e = (Example*)udata;
     CS300* s = (CS300*)e->scene;
 
-    igBeginMainMenuBar();
-    if (igBeginMenu("Load Model", true))
+    bool status = false;
+    igSetNextWindowSize((ImVec2){400, (float)input->window_size.y},
+                        ImGuiCond_Once);
+    igSetNextWindowPos((ImVec2){0, 0}, ImGuiCond_Once, (ImVec2){0, 0});
+    if (igBegin("Control Panel", &status,
+                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize))
     {
-        for (int i = 0; i < s->model_file_paths_count; i++)
+        if (igCollapsingHeader("Select Model", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (igMenuItemBool(s->model_file_paths[i].abs_path_str, NULL, false,
-                               true))
+            for (int i = 0; i < s->model_file_paths_count; i++)
             {
-                try_switch_model(s, i);
+                if (igMenuItemBool(s->model_file_paths[i].filename, NULL, false,
+                                   true))
+                {
+                    try_switch_model(s, i);
+                }
             }
         }
-        igEndMenu();
-    }
 
-    if (igBeginMenu("View Mode", true))
-    {
-        if (igMenuItemBool("Final Scene", NULL, false, true))
+        if (igCollapsingHeader("View Mode", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            s->draw_mode = DrawMode_FinalScene;
+            if (igMenuItemBool("Final Scene", NULL, false, true))
+            {
+                s->draw_mode = DrawMode_FinalScene;
+            }
+            if (igMenuItemBool("Position Map", NULL, false, true))
+            {
+                s->draw_mode = DrawMode_PositionMap;
+                s->fsq_target_texture = s->gbuffer.position_texture;
+            }
+            if (igMenuItemBool("Normal Map", NULL, false, true))
+            {
+                s->draw_mode = DrawMode_NormalMap;
+                s->fsq_target_texture = s->gbuffer.normal_texture;
+            }
+            if (igMenuItemBool("Albedo Map", NULL, false, true))
+            {
+                s->draw_mode = DrawMode_AlbedoMap;
+                s->fsq_target_texture = s->gbuffer.albedo_texture;
+            }
         }
-        if (igMenuItemBool("Position Map", NULL, false, true))
-        {
-            s->draw_mode = DrawMode_PositionMap;
-            s->fsq_target_texture = s->gbuffer.position_texture;
-        }
-        if (igMenuItemBool("Normal Map", NULL, false, true))
-        {
-            s->draw_mode = DrawMode_NormalMap;
-            s->fsq_target_texture = s->gbuffer.normal_texture;
-        }
-        if (igMenuItemBool("Albedo Map", NULL, false, true))
-        {
-            s->draw_mode = DrawMode_AlbedoMap;
-            s->fsq_target_texture = s->gbuffer.albedo_texture;
-        }
-        igEndMenu();
-    }
 
-    igEndMainMenuBar();
+        if (igCollapsingHeader("Misc", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (igCheckbox("Copy Depth", &s->copy_depth))
+            {
+            }
+        }
+    }
+    igEnd();
 
     s->t += input->dt;
 
     update_light_source_transforms(s);
     prepare_per_frame(e, s, input);
     draw_deferred_objects(e, s);
-    copy_depth_buffer(s, input->window_size);
+    if (s->copy_depth)
+        copy_depth_buffer(s, input->window_size);
     draw_debug_objects(e, s);
 }
