@@ -210,7 +210,7 @@ EXAMPLE_INIT_FN_SIG(cs300)
 
     s->light_source_mesh = rc_mesh_make_sphere(0.05f, 32, 32);
     r_vb_init(&s->light_source_vb, &s->light_source_mesh, GL_TRIANGLES);
-    s->light_sources_count = 10;
+    s->light_sources_count = 8;
 
     // Smoothly interpolate from red to green to blue
     for (int i = 0; i < s->light_sources_count; i++)
