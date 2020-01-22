@@ -25,4 +25,9 @@ typedef struct Input_
     float dt;
 } Input;
 
+inline bool a_input_is_key_down(const Input* input, Key key)
+{
+    return input->key_down[input->key_map[key]];
+}
+
 #endif // APP_H
