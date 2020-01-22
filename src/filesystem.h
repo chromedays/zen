@@ -11,6 +11,7 @@
 typedef struct Path_
 {
     histr_String abs_path_str;
+    const char* filename;
 } Path;
 
 enum FileType
@@ -23,7 +24,7 @@ enum FileType
 #define FILE_FOREACH_FN_DECL(name) void name(Path* file_path, void* udata)
 typedef FILE_FOREACH_FN_DECL(FileForeachFn);
 
-void fs_for_each_files_with_ext(Path* p,
+void fs_for_each_files_with_ext(Path p,
                                 const char* ext,
                                 FileForeachFn* for_each_fn,
                                 void* udata);

@@ -3,12 +3,12 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
-void fs_for_each_files_with_ext(Path* p,
+void fs_for_each_files_with_ext(Path p,
                                 const char* ext,
                                 FileForeachFn* for_each_fn,
                                 void* udata)
 {
-    histr_String pattern = histr_makestr(p->abs_path_str);
+    histr_String pattern = histr_makestr(p.abs_path_str);
     histr_append(pattern, FS_PATH_SEPARATOR);
     histr_append(pattern, "*.");
     histr_append(pattern, ext);
@@ -19,7 +19,7 @@ void fs_for_each_files_with_ext(Path* p,
     {
         do
         {
-            Path file_path = fs_path_copy(*p);
+            Path file_path = fs_path_copy(p);
             fs_path_append(&file_path, fd.cFileName);
             for_each_fn(&file_path, udata);
             fs_path_cleanup(&file_path);
