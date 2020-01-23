@@ -16,7 +16,6 @@ typedef struct Phong_
     VertexBuffer light_source_vb;
     GLuint unlit_shader;
     GLuint phong_shader;
-    GLuint blinn_shader;
     ExamplePhongLight lights[5];
     int lights_count;
     float t;
@@ -50,7 +49,6 @@ EXAMPLE_INIT_FN_SIG(phong)
 
     s->unlit_shader = e_shader_load(e, "unlit");
     s->phong_shader = e_shader_load(e, "phong");
-    s->blinn_shader = e_shader_load(e, "blinn");
 
     s->lights[0] = (ExamplePhongLight){
         .type = ExamplePhongLightType_Directional,
@@ -106,7 +104,6 @@ EXAMPLE_CLEANUP_FN_SIG(phong)
     r_vb_cleanup(&s->light_source_vb);
     glDeleteProgram(s->unlit_shader);
     glDeleteProgram(s->phong_shader);
-    glDeleteProgram(s->blinn_shader);
     e_example_destroy(e);
 }
 
@@ -152,7 +149,7 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
-    glUseProgram(s->blinn_shader);
+    glUseProgram(s->phong_shader);
     glBindTextureUnit(0, s->diffuse_map);
     glBindTextureUnit(1, s->specular_map);
 
