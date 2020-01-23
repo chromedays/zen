@@ -16,11 +16,12 @@ typedef struct Phong_
     VertexBuffer light_source_vb;
     GLuint unlit_shader;
     GLuint phong_shader;
+    GLuint depth_shader;
     ExamplePhongLight lights[5];
     int lights_count;
     float t;
 
-    bool show_depth;
+    bool draw_depth;
 } Phong;
 
 EXAMPLE_INIT_FN_SIG(phong)
@@ -49,6 +50,7 @@ EXAMPLE_INIT_FN_SIG(phong)
 
     s->unlit_shader = e_shader_load(e, "unlit");
     s->phong_shader = e_shader_load(e, "phong");
+    s->depth_shader = e_shader_load(e, "depth");
 
     s->lights[0] = (ExamplePhongLight){
         .type = ExamplePhongLightType_Directional,
@@ -104,6 +106,7 @@ EXAMPLE_CLEANUP_FN_SIG(phong)
     r_vb_cleanup(&s->light_source_vb);
     glDeleteProgram(s->unlit_shader);
     glDeleteProgram(s->phong_shader);
+    glDeleteProgram(s->depth_shader);
     e_example_destroy(e);
 }
 
@@ -121,9 +124,7 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     {
         if (igCollapsingHeader("Depth Control", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (igCheckbox("Draw depth buffer", &s->show_depth))
-            {
-            }
+            igCheckbox("Draw depth buffer", &s->draw_depth);
         }
     }
     igEnd();
@@ -143,13 +144,18 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     e_apply_per_frame_ubo(e, &per_frame);
 
     glClearColor(0.1f, 0.1f, 0.1f, 1);
+    glClearDepth(1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
-    glUseProgram(s->phong_shader);
+    if (s->draw_depth)
+        glUseProgram(s->depth_shader);
+    else
+        glUseProgram(s->phong_shader);
+
     glBindTextureUnit(0, s->diffuse_map);
     glBindTextureUnit(1, s->specular_map);
 
@@ -173,7 +179,10 @@ EXAMPLE_UPDATE_FN_SIG(phong)
         }
     }
 
-    glUseProgram(s->unlit_shader);
+    if (s->draw_depth)
+        glUseProgram(s->depth_shader);
+    else
+        glUseProgram(s->unlit_shader);
     for (int i = 1; i < s->lights_count; i++)
     {
         ExamplePerObjectUBO per_object = {0};
