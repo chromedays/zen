@@ -78,6 +78,16 @@ typedef struct ExamplePerObjectUBO_
 void e_apply_per_frame_ubo(const Example* e, const ExamplePerFrameUBO* data);
 void e_apply_per_object_ubo(const Example* e, const ExamplePerObjectUBO* data);
 
+typedef struct ExampleFpsCamera_
+{
+    FVec3 pos;
+    float yaw_deg;
+    float pitch_deg;
+} ExampleFpsCamera;
+
+void e_fpscam_update(ExampleFpsCamera* cam, const Input* input, float speed);
+FVec3 e_fpscam_get_look(const ExampleFpsCamera* cam);
+
 EXAMPLE_DECL(hello_triangle);
 EXAMPLE_DECL(hello_mesh);
 EXAMPLE_DECL(phong);

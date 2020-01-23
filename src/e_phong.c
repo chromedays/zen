@@ -21,6 +21,8 @@ typedef struct Phong_
     int lights_count;
     float t;
 
+    ExampleFpsCamera cam;
+
     bool draw_depth;
 } Phong;
 
@@ -91,6 +93,8 @@ EXAMPLE_INIT_FN_SIG(phong)
 
     s->lights_count = ARRAY_LENGTH(point_light_colors) + 1;
 
+    s->cam.pos.z = 3;
+
     return e;
 }
 
@@ -116,6 +120,8 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     Phong* s = (Phong*)e->scene;
     s->t += input->dt;
 
+    e_fpscam_update(&s->cam, input, 5);
+
     igSetNextWindowSize((ImVec2){300, (float)input->window_size.y},
                         ImGuiCond_Once);
     igSetNextWindowPos((ImVec2){0, 0}, ImGuiCond_Once, (ImVec2){0, 0});
@@ -127,6 +133,7 @@ EXAMPLE_UPDATE_FN_SIG(phong)
             igCheckbox("Draw depth buffer", &s->draw_depth);
         }
     }
+
     igEnd();
 
     ExamplePerFrameUBO per_frame = {0};
@@ -135,7 +142,9 @@ EXAMPLE_UPDATE_FN_SIG(phong)
         60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
         100);
     FVec3 view_pos = {0, 0, 3};
-    per_frame.view = mat4_lookat(view_pos, (FVec3){0}, (FVec3){0, 1, 0});
+    per_frame.view = mat4_lookat(
+        s->cam.pos, fvec3_add(s->cam.pos, e_fpscam_get_look(&s->cam)),
+        (FVec3){0, 1, 0});
     for (int i = 0; i < s->lights_count; i++)
         per_frame.phong_lights[i] = s->lights[i];
     per_frame.phong_lights_count = s->lights_count;
