@@ -20,6 +20,8 @@ typedef struct Phong_
     ExamplePhongLight lights[5];
     int lights_count;
     float t;
+
+    bool show_depth;
 } Phong;
 
 EXAMPLE_INIT_FN_SIG(phong)
@@ -113,6 +115,21 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     Example* e = (Example*)udata;
     Phong* s = (Phong*)e->scene;
     s->t += input->dt;
+
+    igSetNextWindowSize((ImVec2){300, (float)input->window_size.y},
+                        ImGuiCond_Once);
+    igSetNextWindowPos((ImVec2){0, 0}, ImGuiCond_Once, (ImVec2){0, 0});
+    if (igBegin("Control Panel", NULL,
+                ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
+    {
+        if (igCollapsingHeader("Depth Control", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (igCheckbox("Draw depth buffer", &s->show_depth))
+            {
+            }
+        }
+    }
+    igEnd();
 
     ExamplePerFrameUBO per_frame = {0};
 
