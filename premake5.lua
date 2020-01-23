@@ -41,7 +41,7 @@ local function internal_simple_win32_cpp(name, static_libs, clang_format_path, p
         characterset 'MBCS'
         warnings 'Extra'
         flags {'FatalCompileWarnings'}
-        disablewarnings {'4189', '4505', '4201', '4100', '4204', '4706'}
+        disablewarnings {'4189', '4505', '4201', '4100', '4204', '4706', '4324'}
         defines {'_CRT_SECURE_NO_WARNINGS'}
 
         targetdir(build_root .. "%{cfg.buildcfg}")
