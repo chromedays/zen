@@ -58,7 +58,7 @@ typedef struct CS300_
     float orbit_speed_deg;
     float orbit_radius;
 
-    float camera_distance;
+    ExampleFpsCamera cam;
 
     float t;
 
@@ -237,7 +237,7 @@ EXAMPLE_INIT_FN_SIG(cs300)
     s->orbit_speed_deg = 30;
     s->orbit_radius = 0.5f;
 
-    s->camera_distance = 2;
+    s->cam.pos.z = 2;
 
     Vertex fsq_vertices[4] = {
         {{-1, -1, 0}, {0, 0}},
@@ -374,8 +374,9 @@ void prepare_per_frame(Example* e, const CS300* s, const Input* input)
     per_frame.proj = mat4_persp(
         60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
         100);
-    per_frame.view = mat4_lookat((FVec3){0, 1, s->camera_distance}, (FVec3){0},
-                                 (FVec3){0, 1, 0});
+    per_frame.view = mat4_lookat(
+        s->cam.pos, fvec3_add(s->cam.pos, e_fpscam_get_look(&s->cam)),
+        (FVec3){0, 1, 0});
     e_apply_per_frame_ubo(e, &per_frame);
 }
 
@@ -415,7 +416,8 @@ static void draw_deferred_objects(Example* e, const CS300* s)
 
     switch (s->draw_mode)
     {
-    case DrawMode_FinalScene: {
+    case DrawMode_FinalScene:
+    {
         uint textures[] = {
             s->gbuffer.position_texture,
             s->gbuffer.normal_texture,
@@ -529,6 +531,8 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
         }
     }
     igEnd();
+
+    e_fpscam_update(&s->cam, input, 5);
 
     s->t += input->dt;
 
