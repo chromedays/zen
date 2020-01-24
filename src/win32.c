@@ -12,6 +12,7 @@
 
 static HMODULE g_opengl;
 static Input* g_input;
+static HCURSOR g_cursor;
 
 #define WIN32_MENU_NAME "Zen Win32 Menu"
 #define WIN32_CLASS_NAME "Zen Win32 Class"
@@ -31,14 +32,19 @@ LRESULT CALLBACK win32_message_callback(HWND window,
 {
     LRESULT result = 0;
 
+    // TODO: Handle cursor visibility in a better way
+
     switch (msg)
     {
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK: g_input->mouse_down[0] = true; break;
     case WM_LBUTTONUP: g_input->mouse_down[0] = false; break;
-    case WM_RBUTTONDOWN:
+    case WM_RBUTTONDOWN: SetCursor(NULL);
     case WM_RBUTTONDBLCLK: g_input->mouse_down[1] = true; break;
-    case WM_RBUTTONUP: g_input->mouse_down[1] = false; break;
+    case WM_RBUTTONUP:
+        g_input->mouse_down[1] = false;
+        SetCursor(g_cursor);
+        break;
     case WM_MBUTTONDOWN:
     case WM_MBUTTONDBLCLK: g_input->mouse_down[2] = true; break;
     case WM_MBUTTONUP: g_input->mouse_down[2] = false; break;
@@ -52,6 +58,17 @@ LRESULT CALLBACK win32_message_callback(HWND window,
     case WM_KEYUP:
         if (g_input && wp < ARRAY_LENGTH(g_input->key_down))
             g_input->key_down[wp] = false;
+        break;
+    case WM_SETCURSOR:
+        PRINTLN("SETCURSOR");
+        if (g_input)
+        {
+            if (g_input->mouse_down[1])
+                SetCursor(NULL);
+            else
+                SetCursor(g_cursor);
+            result = TRUE;
+        }
         break;
     case WM_CLOSE: PostQuitMessage(0); break;
     default: result = DefWindowProcA(window, msg, wp, lp);
@@ -79,6 +96,7 @@ bool win32_app_init(Win32App* app,
                       .hCursor = LoadCursorA(NULL, IDC_ARROW),
                       .lpszMenuName = WIN32_MENU_NAME,
                       .lpszClassName = WIN32_CLASS_NAME};
+    g_cursor = wc.hCursor;
     if (RegisterClassExA(&wc))
     {
         DWORD window_style =
@@ -170,6 +188,13 @@ void win32_update_input(const Win32App* app)
     POINT mp;
     GetCursorPos(&mp);
     ScreenToClient(app->window, &mp);
+    if (input->mouse_pos.x != 0 || input->mouse_pos.y != 0)
+    {
+        input->mouse_delta = (IVec2){
+            mp.x - input->mouse_pos.x,
+            mp.y - input->mouse_pos.y,
+        };
+    }
     input->mouse_pos.x = mp.x;
     input->mouse_pos.y = mp.y;
 

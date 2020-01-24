@@ -20,6 +20,7 @@ typedef struct Input_
     bool key_shift;
     bool key_alt;
     bool mouse_down[3];
+    IVec2 mouse_delta;
     IVec2 mouse_pos;
     IVec2 window_size;
     float dt;

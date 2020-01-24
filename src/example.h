@@ -2,6 +2,7 @@
 #define EXAMPLE_H
 #include "scene.h"
 #include "renderer.h"
+#include "util.h"
 
 #define EXAMPLE_INIT_FN_SIG(scene_name) SCENE_INIT_FN_SIG(scene_name##_init)
 #define EXAMPLE_CLEANUP_FN_SIG(scene_name)                                     \
@@ -44,37 +45,28 @@ typedef enum ExamplePhongLightType_
 
 typedef struct ExamplePhongLight_
 {
-    ExamplePhongLightType type;
-    UNIFORM_PAD;
-    UNIFORM_PAD;
-    UNIFORM_PAD;
-    FVec3 ambient;
-    UNIFORM_PAD;
-    FVec3 diffuse;
-    UNIFORM_PAD;
-    FVec3 specular;
-    UNIFORM_PAD;
-    FVec3 pos_or_dir;
-    float inner_angle;
-    float outer_angle;
-    float falloff;
-    float linear;
-    float quadratic;
+    ALIGN_AS(4) ExamplePhongLightType type;
+    ALIGN_AS(16) FVec3 ambient;
+    ALIGN_AS(16) FVec3 diffuse;
+    ALIGN_AS(16) FVec3 specular;
+    ALIGN_AS(16) FVec3 pos_or_dir;
+    ALIGN_AS(4) float inner_angle;
+    ALIGN_AS(4) float outer_angle;
+    ALIGN_AS(4) float falloff;
+    ALIGN_AS(4) float linear;
+    ALIGN_AS(4) float quadratic;
 } ExamplePhongLight;
 
 #define MAX_PHONG_LIGHTS_COUNT 10
 
 typedef struct ExamplePerFrameUBO_
 {
-    Mat4 view;
-    Mat4 proj;
-    ExamplePhongLight phong_lights[MAX_PHONG_LIGHTS_COUNT];
-    int phong_lights_count;
-    UNIFORM_PAD;
-    UNIFORM_PAD;
-    UNIFORM_PAD;
-    FVec3 view_pos;
-    float t;
+    ALIGN_AS(16) Mat4 view;
+    ALIGN_AS(16) Mat4 proj;
+    ALIGN_AS(16) ExamplePhongLight phong_lights[MAX_PHONG_LIGHTS_COUNT];
+    ALIGN_AS(4) int phong_lights_count;
+    ALIGN_AS(16) FVec3 view_pos;
+    ALIGN_AS(4) float t;
 } ExamplePerFrameUBO;
 
 typedef struct ExamplePerObjectUBO_
@@ -85,6 +77,16 @@ typedef struct ExamplePerObjectUBO_
 
 void e_apply_per_frame_ubo(const Example* e, const ExamplePerFrameUBO* data);
 void e_apply_per_object_ubo(const Example* e, const ExamplePerObjectUBO* data);
+
+typedef struct ExampleFpsCamera_
+{
+    FVec3 pos;
+    float yaw_deg;
+    float pitch_deg;
+} ExampleFpsCamera;
+
+void e_fpscam_update(ExampleFpsCamera* cam, const Input* input, float speed);
+FVec3 e_fpscam_get_look(const ExampleFpsCamera* cam);
 
 EXAMPLE_DECL(hello_triangle);
 EXAMPLE_DECL(hello_mesh);

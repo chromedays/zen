@@ -16,10 +16,14 @@ typedef struct Phong_
     VertexBuffer light_source_vb;
     GLuint unlit_shader;
     GLuint phong_shader;
-    GLuint blinn_shader;
+    GLuint depth_shader;
     ExamplePhongLight lights[5];
     int lights_count;
     float t;
+
+    ExampleFpsCamera cam;
+
+    bool draw_depth;
 } Phong;
 
 EXAMPLE_INIT_FN_SIG(phong)
@@ -48,7 +52,7 @@ EXAMPLE_INIT_FN_SIG(phong)
 
     s->unlit_shader = e_shader_load(e, "unlit");
     s->phong_shader = e_shader_load(e, "phong");
-    s->blinn_shader = e_shader_load(e, "blinn");
+    s->depth_shader = e_shader_load(e, "depth");
 
     s->lights[0] = (ExamplePhongLight){
         .type = ExamplePhongLightType_Directional,
@@ -89,6 +93,8 @@ EXAMPLE_INIT_FN_SIG(phong)
 
     s->lights_count = ARRAY_LENGTH(point_light_colors) + 1;
 
+    s->cam.pos.z = 3;
+
     return e;
 }
 
@@ -104,7 +110,7 @@ EXAMPLE_CLEANUP_FN_SIG(phong)
     r_vb_cleanup(&s->light_source_vb);
     glDeleteProgram(s->unlit_shader);
     glDeleteProgram(s->phong_shader);
-    glDeleteProgram(s->blinn_shader);
+    glDeleteProgram(s->depth_shader);
     e_example_destroy(e);
 }
 
@@ -114,13 +120,31 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     Phong* s = (Phong*)e->scene;
     s->t += input->dt;
 
+    e_fpscam_update(&s->cam, input, 5);
+
+    igSetNextWindowSize((ImVec2){300, (float)input->window_size.y},
+                        ImGuiCond_Once);
+    igSetNextWindowPos((ImVec2){0, 0}, ImGuiCond_Once, (ImVec2){0, 0});
+    if (igBegin("Control Panel", NULL,
+                ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
+    {
+        if (igCollapsingHeader("Depth Control", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            igCheckbox("Draw depth buffer", &s->draw_depth);
+        }
+    }
+
+    igEnd();
+
     ExamplePerFrameUBO per_frame = {0};
 
     per_frame.proj = mat4_persp(
         60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
         100);
     FVec3 view_pos = {0, 0, 3};
-    per_frame.view = mat4_lookat(view_pos, (FVec3){0}, (FVec3){0, 1, 0});
+    per_frame.view = mat4_lookat(
+        s->cam.pos, fvec3_add(s->cam.pos, e_fpscam_get_look(&s->cam)),
+        (FVec3){0, 1, 0});
     for (int i = 0; i < s->lights_count; i++)
         per_frame.phong_lights[i] = s->lights[i];
     per_frame.phong_lights_count = s->lights_count;
@@ -129,13 +153,18 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     e_apply_per_frame_ubo(e, &per_frame);
 
     glClearColor(0.1f, 0.1f, 0.1f, 1);
+    glClearDepth(1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
-    glUseProgram(s->blinn_shader);
+    if (s->draw_depth)
+        glUseProgram(s->depth_shader);
+    else
+        glUseProgram(s->phong_shader);
+
     glBindTextureUnit(0, s->diffuse_map);
     glBindTextureUnit(1, s->specular_map);
 
@@ -159,7 +188,10 @@ EXAMPLE_UPDATE_FN_SIG(phong)
         }
     }
 
-    glUseProgram(s->unlit_shader);
+    if (s->draw_depth)
+        glUseProgram(s->depth_shader);
+    else
+        glUseProgram(s->unlit_shader);
     for (int i = 1; i < s->lights_count; i++)
     {
         ExamplePerObjectUBO per_object = {0};

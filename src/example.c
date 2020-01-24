@@ -2,9 +2,11 @@
 #include "resource.h"
 #include "filesystem.h"
 #include "debug.h"
+#include "app.h"
 #include <histr.h>
 #include <stb_image.h>
 #include <stdlib.h>
+#include <math.h>
 
 Example* e_example_make(const char* name, size_t scene_size)
 {
@@ -180,4 +182,47 @@ void e_apply_per_object_ubo(const Example* e, const ExamplePerObjectUBO* data)
     glBindBuffer(GL_UNIFORM_BUFFER, e->per_object_ubo);
     glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(*data), data);
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
+}
+
+void e_fpscam_update(ExampleFpsCamera* cam, const Input* input, float speed)
+{
+    int move_right = 0;
+    int move_forward = 0;
+    if (a_input_is_key_down(input, Key_W))
+        move_forward += 1;
+    if (a_input_is_key_down(input, Key_S))
+        move_forward -= 1;
+    if (a_input_is_key_down(input, Key_A))
+        move_right -= 1;
+    if (a_input_is_key_down(input, Key_D))
+        move_right += 1;
+
+    if (input->mouse_down[1])
+    {
+        cam->yaw_deg += (float)input->mouse_delta.x * 0.5f;
+        cam->pitch_deg -= (float)input->mouse_delta.y * 0.5f;
+    }
+
+    FVec3 look = e_fpscam_get_look(cam);
+
+    FVec3 up = {0, 1, 0};
+    FVec3 right = fvec3_normalize(fvec3_cross(look, up));
+
+    FVec3 movement =
+        fvec3_add(fvec3_mulf(right, (float)move_right * speed * input->dt),
+                  fvec3_mulf(look, (float)move_forward * speed * input->dt));
+    cam->pos = fvec3_add(cam->pos, movement);
+}
+
+FVec3 e_fpscam_get_look(const ExampleFpsCamera* cam)
+{
+    FVec3 look;
+    float yaw_rad = degtorad(cam->yaw_deg);
+    float pitch_rad = degtorad(cam->pitch_deg);
+    look.x = sinf(yaw_rad) * cosf(pitch_rad);
+    look.y = sinf(pitch_rad);
+    look.z = -cosf(yaw_rad);
+    look = fvec3_normalize(look);
+
+    return look;
 }
