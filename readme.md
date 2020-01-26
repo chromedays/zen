@@ -13,6 +13,6 @@ premake5 vs2019
 Implemented in cs300_350 branch
 ![Deferred](screenshots/deferred.png)
 
-## Berstein Polynomial Sum
+## Bernstein Polynomial Sum
 Implemented in curve_graph branch
-![Berstein](screenshots/bernstein.png)
+![Bernstein](screenshots/bernstein.png)
