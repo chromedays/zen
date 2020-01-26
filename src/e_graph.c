@@ -5,10 +5,10 @@
 #include <glad/glad.h>
 #include <stdlib.h>
 #include <math.h>
-#include <string.h>
+#include <float.h>
 
 #define MAX_DEGREE 20
-#define CURVE_POINTS_COUNT 1000
+#define CURVE_POINTS_COUNT 100
 #define POINT_RADIUS 10.f
 
 typedef struct Graph_ Graph;
@@ -49,7 +49,7 @@ typedef struct Graph_
     bool is_dragging;
 } Graph;
 
-int g_combs[MAX_DEGREE + 1][MAX_DEGREE + 1];
+static int g_combs[MAX_DEGREE + 1][MAX_DEGREE + 1];
 
 static int comb(int n, int c)
 {
@@ -75,20 +75,39 @@ static float calc_polynomial_bb(Graph* s, float t)
 }
 
 static float
-    calc_polynomial_nli_rec(const Graph* s, int begin, int end, float t)
+    calc_polynomial_nli_rec(const Graph* s,
+                            float (*values)[MAX_DEGREE + 1][MAX_DEGREE + 1],
+                            int begin,
+                            int end,
+                            float t)
 {
     if ((end - begin) == 1)
         return (1.f - t) * s->coeffs[begin] + t * s->coeffs[end];
 
-    return (1.f - t) * calc_polynomial_nli_rec(s, begin, end - 1, t) +
-           t * calc_polynomial_nli_rec(s, begin + 1, end, t);
+    if ((*values)[begin][end] != FLT_MAX)
+        return (*values)[begin][end];
+
+    float result =
+        (1.f - t) * calc_polynomial_nli_rec(s, values, begin, end - 1, t) +
+        t * calc_polynomial_nli_rec(s, values, begin + 1, end, t);
+
+    (*values)[begin][end] = result;
+
+    return result;
 }
 
 static float calc_polynomial_nli(Graph* s, float t)
 {
     int d = s->degree;
 
-    return calc_polynomial_nli_rec(s, 0, d, t);
+    float values[MAX_DEGREE + 1][MAX_DEGREE + 1];
+    for (int i = 0; i <= MAX_DEGREE; i++)
+    {
+        for (int j = 0; j <= MAX_DEGREE; j++)
+            values[i][j] = FLT_MAX;
+    }
+
+    return calc_polynomial_nli_rec(s, &values, 0, d, t);
 }
 
 static void set_world_bound(Graph* s, const Input* input)
@@ -132,10 +151,22 @@ static float world_to_graph_y(const Graph* s, float wy)
     return gy;
 }
 
+static FVec2 world_to_screen(const Input* input, FVec2 wp)
+{
+    FVec2 sp = {(float)wp.x, (float)input->window_size.y - wp.y};
+    return sp;
+}
+
+static FVec2 screen_to_world(const Input* input, FVec2 sp)
+{
+    FVec2 wp = {(float)sp.x, (float)input->window_size.y - sp.y};
+    return wp;
+}
+
 static FVec2 get_world_mouse_pos(const Input* input)
 {
-    FVec2 wmp = {(float)input->mouse_pos.x,
-                 (float)(input->window_size.y - input->mouse_pos.y)};
+    FVec2 wmp = screen_to_world(
+        input, (FVec2){(float)input->mouse_pos.x, (float)input->mouse_pos.y});
     return wmp;
 }
 
@@ -279,18 +310,53 @@ EXAMPLE_UPDATE_FN_SIG(graph)
         }
         igEndCombo();
     }
-
     igEnd();
+
+    {
+        igSetNextWindowSize((ImVec2){30, 10}, ImGuiCond_Always);
+
+        ImGuiWindowFlags flags =
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav |
+            ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground;
+
+        FVec2 p = world_to_screen(input, graph_to_world(s, s->graph_min));
+        p.y -= 20;
+        p.x -= 30;
+        igSetNextWindowPos((ImVec2){p.x, p.y}, ImGuiCond_Once, (ImVec2){0, 0});
+        igBegin("-3", NULL, flags);
+        igText("-3");
+        igEnd();
+
+        p = world_to_screen(
+            input, graph_to_world(s, (FVec2){s->graph_min.x, s->graph_max.y}));
+        p.y -= 10;
+        p.x -= 30;
+        igSetNextWindowPos((ImVec2){p.x, p.y}, ImGuiCond_Once, (ImVec2){0, 0});
+        igBegin(" 3", NULL, flags);
+        igText(" 3");
+        igEnd();
+
+        p = world_to_screen(input, graph_to_world(s, s->graph_min));
+        p.x -= 10;
+        igSetNextWindowPos((ImVec2){p.x, p.y}, ImGuiCond_Once, (ImVec2){0, 0});
+        igBegin("0", NULL, flags);
+        igText("0");
+        igEnd();
+
+        p = world_to_screen(
+            input, graph_to_world(s, (FVec2){s->graph_max.x, s->graph_min.y}));
+        p.x -= 10;
+        igSetNextWindowPos((ImVec2){p.x, p.y}, ImGuiCond_Once, (ImVec2){0, 0});
+        igBegin("1", NULL, flags);
+        igText("1");
+        igEnd();
+    }
 
     ExamplePerFrameUBO per_frame = {0};
     per_frame.view =
         mat4_lookat((FVec3){0, 0, 50}, (FVec3){0, 0, 0}, (FVec3){0, 1, 0});
-#if 1
     per_frame.proj = mat4_ortho((float)input->window_size.x, 0,
                                 (float)input->window_size.y, 0, 0.1f, 100);
-#else
-    per_frame.proj = mat4_ortho(-10, 10, 20, 0, 0.1f, 100);
-#endif
     e_apply_per_frame_ubo(e, &per_frame);
 
     glClearColor(0.1f, 0.1f, 0.1f, 1);
