@@ -227,10 +227,13 @@ EXAMPLE_INIT_FN_SIG(cs300)
         float g = get_channel_function2(gx, period);
         float b = get_channel_function1(bx, period);
 
-        s->light_sources[i].color.x = r;
-        s->light_sources[i].color.y = g;
-        s->light_sources[i].color.z = b;
+        float intensity = 0.4f;
+
+        s->light_sources[i].color.x = r * intensity;
+        s->light_sources[i].color.y = g * intensity;
+        s->light_sources[i].color.z = b * intensity;
     }
+    // s->light_sources[0].color = (FVec3){1, 0, 0};
 
     s->light_source_shader = e_shader_load(e, "light_source");
 
@@ -377,6 +380,7 @@ void prepare_per_frame(Example* e, const CS300* s, const Input* input)
     per_frame.view = mat4_lookat(
         s->cam.pos, fvec3_add(s->cam.pos, e_fpscam_get_look(&s->cam)),
         (FVec3){0, 1, 0});
+    per_frame.view_pos = s->cam.pos;
     e_apply_per_frame_ubo(e, &per_frame);
 }
 
@@ -416,8 +420,7 @@ static void draw_deferred_objects(Example* e, const CS300* s)
 
     switch (s->draw_mode)
     {
-    case DrawMode_FinalScene:
-    {
+    case DrawMode_FinalScene: {
         uint textures[] = {
             s->gbuffer.position_texture,
             s->gbuffer.normal_texture,
