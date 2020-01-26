@@ -60,7 +60,6 @@ LRESULT CALLBACK win32_message_callback(HWND window,
             g_input->key_down[wp] = false;
         break;
     case WM_SETCURSOR:
-        PRINTLN("SETCURSOR");
         if (g_input)
         {
             if (g_input->mouse_down[1])
