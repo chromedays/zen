@@ -1,6 +1,6 @@
-out vec3 out_color;
+out vec4 out_color;
 
 void main()
 {
-    out_color = unlit_color();
+    out_color = vec4(unlit_color(), 1);
 }
