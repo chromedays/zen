@@ -8,10 +8,17 @@
 
 typedef struct Phong_
 {
-    Mesh plane_mesh;
-    VertexBuffer plane_vb;
+    Mesh cube_mesh;
+    VertexBuffer cube_vb;
     GLuint diffuse_map;
     GLuint specular_map;
+
+    Mesh quad_mesh;
+    VertexBuffer transparent_vb;
+    GLuint grass_texture;
+    GLuint window_texture;
+    GLuint transparent_shader;
+
     Mesh light_source_mesh;
     VertexBuffer light_source_vb;
     GLuint unlit_shader;
@@ -23,7 +30,7 @@ typedef struct Phong_
 
     ExampleFpsCamera cam;
 
-    bool draw_depth;
+    bool debug_transparent_order;
 } Phong;
 
 EXAMPLE_INIT_FN_SIG(phong)
@@ -31,21 +38,16 @@ EXAMPLE_INIT_FN_SIG(phong)
     Example* e = (Example*)e_example_make("phong", sizeof(Phong));
     Phong* s = (Phong*)e->scene;
 
-#if 0
-    Vertex vertices[] = {
-        {{-0.5f, 0, 0.5f}, {0, 0}, {0, 1, 0}},
-        {{0.5f, 0, 0.5f}, {1, 0}, {0, 1, 0}},
-        {{0.5f, 0, -0.5f}, {1, 1}, {0, 1, 0}},
-        {{-0.5f, 0, -0.5f}, {0, 1}, {0, 1, 0}},
-    };
-    uint indices[] = {0, 1, 2, 2, 3, 0};
-    s->plane_mesh = rc_mesh_make_raw2(ARRAY_LENGTH(vertices),
-                                      ARRAY_LENGTH(indices), vertices, indices);
-#endif
-    s->plane_mesh = rc_mesh_make_cube();
-    r_vb_init(&s->plane_vb, &s->plane_mesh, GL_TRIANGLES);
+    s->cube_mesh = rc_mesh_make_cube();
+    r_vb_init(&s->cube_vb, &s->cube_mesh, GL_TRIANGLES);
     s->diffuse_map = e_texture_load(e, "box_diffuse.png");
     s->specular_map = e_texture_load(e, "box_specular.png");
+
+    s->quad_mesh = rc_mesh_make_quad();
+    r_vb_init(&s->transparent_vb, &s->quad_mesh, GL_TRIANGLES);
+    s->grass_texture = e_texture_load(e, "grass.png");
+    s->window_texture = e_texture_load(e, "transparent_window.png");
+    s->transparent_shader = e_shader_load(e, "transparent");
 
     s->light_source_mesh = rc_mesh_make_sphere(0.3f, 32, 32);
     r_vb_init(&s->light_source_vb, &s->light_source_mesh, GL_TRIANGLES);
@@ -63,10 +65,10 @@ EXAMPLE_INIT_FN_SIG(phong)
     };
 
     FVec3 point_light_positions[] = {
-        {0.7f, 0.2f, 2},
+        {0.7f, 3.2f, 2},
         {2.3f, -3.3f, -4},
         {-4, 2, -12},
-        {0, 0, -3},
+        {0, -1.5f, -3},
     };
     FVec3 point_light_colors[] = {
         {1, 0.6f, 0},
@@ -102,10 +104,14 @@ EXAMPLE_CLEANUP_FN_SIG(phong)
 {
     Example* e = (Example*)udata;
     Phong* s = (Phong*)e->scene;
-    rc_mesh_cleanup(&s->plane_mesh);
-    r_vb_cleanup(&s->plane_vb);
+    rc_mesh_cleanup(&s->cube_mesh);
+    r_vb_cleanup(&s->cube_vb);
     glDeleteTextures(1, &s->diffuse_map);
     glDeleteTextures(1, &s->specular_map);
+    rc_mesh_cleanup(&s->quad_mesh);
+    r_vb_cleanup(&s->transparent_vb);
+    glDeleteTextures(1, &s->grass_texture);
+    glDeleteProgram(s->transparent_shader);
     rc_mesh_cleanup(&s->light_source_mesh);
     r_vb_cleanup(&s->light_source_vb);
     glDeleteProgram(s->unlit_shader);
@@ -132,7 +138,7 @@ void draw_cubes(const Example* e, const Phong* s, bool is_outline)
         per_object.model = mat4_mul(&trans, &per_object.model);
         per_object.color = (FVec3){1, 0, 0};
         e_apply_per_object_ubo(e, &per_object);
-        r_vb_draw(&s->plane_vb);
+        r_vb_draw(&s->cube_vb);
     }
 }
 
@@ -150,10 +156,7 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     if (igBegin("Control Panel", NULL,
                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
     {
-        if (igCollapsingHeader("Depth Control", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            igCheckbox("Draw depth buffer", &s->draw_depth);
-        }
+        igCheckbox("Debug transparent draw order", &s->debug_transparent_order);
     }
 
     igEnd();
@@ -174,6 +177,8 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     per_frame.t = s->t;
     e_apply_per_frame_ubo(e, &per_frame);
 
+    glEnable(GL_MULTISAMPLE);
+
     glEnable(GL_DEPTH_TEST);
     glClearDepth(1);
     glDepthMask(GL_TRUE);
@@ -191,13 +196,9 @@ EXAMPLE_UPDATE_FN_SIG(phong)
 
     glClearColor(0.1f, 0.1f, 0.1f, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glDisable(GL_STENCIL_TEST);
 
-    glStencilMask(0x00);
-    glStencilFunc(GL_ALWAYS, 1, 0xFF);
-    if (s->draw_depth)
-        glUseProgram(s->depth_shader);
-    else
-        glUseProgram(s->unlit_shader);
+    glUseProgram(s->unlit_shader);
     for (int i = 1; i < s->lights_count; i++)
     {
         ExamplePerObjectUBO per_object = {0};
@@ -207,24 +208,78 @@ EXAMPLE_UPDATE_FN_SIG(phong)
         r_vb_draw(&s->light_source_vb);
     }
 
-    if (s->draw_depth)
-        glUseProgram(s->depth_shader);
-    else
+    // Draw plane
+    {
         glUseProgram(s->phong_shader);
+        glBindTextureUnit(0, s->diffuse_map);
+        glBindTextureUnit(1, s->specular_map);
+        ExamplePerObjectUBO per_object = {0};
+        Mat4 trans = mat4_translation((FVec3){0, -1, 0});
+        Mat4 scale = mat4_scalev((FVec3){10, 1, 10});
+        per_object.model = mat4_mul(&trans, &scale);
+        e_apply_per_object_ubo(e, &per_object);
+        r_vb_draw(&s->cube_vb);
+    }
 
-    glBindTextureUnit(0, s->diffuse_map);
-    glBindTextureUnit(1, s->specular_map);
+    // Draw cubes
+    {
+        FVec3 positions[] = {
+            {-1.5f, 0, -0.03f},
+            {1.5f, 0, 0},
+        };
+        glUseProgram(s->phong_shader);
+        glBindTextureUnit(0, s->diffuse_map);
+        glBindTextureUnit(1, s->specular_map);
+        for (int i = 0; i < ARRAY_LENGTH(positions); i++)
+        {
+            ExamplePerObjectUBO per_object = {0};
+            per_object.model = mat4_translation(positions[i]);
+            e_apply_per_object_ubo(e, &per_object);
+            r_vb_draw(&s->cube_vb);
+        }
+    }
 
-    glStencilMask(0xFF);
-    glStencilFunc(GL_ALWAYS, 1, 0xFF);
-    glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
-    draw_cubes(e, s, false);
-    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+    // Draw transparent objects
+    {
+        glDisable(GL_CULL_FACE);
 
-    glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-    glStencilMask(0x00);
-    glDisable(GL_DEPTH_TEST);
-    glUseProgram(s->unlit_shader);
-    draw_cubes(e, s, true);
-    glEnable(GL_DEPTH_TEST);
+        FVec3 positions[] = {
+            {-1.5f, 0, 0.48f}, {1.5f, 0, 0.51f}, {0, 0, 0.7f},
+            {-0.3f, 0, 2.3f},  {0.5f, 0, -0.6f},
+        };
+
+        for (int i = 0; i < ARRAY_LENGTH(positions); i++)
+        {
+            for (int j = i + 1; j < ARRAY_LENGTH(positions); j++)
+            {
+                float a = fvec3_length_sq(fvec3_sub(s->cam.pos, positions[i]));
+                float b = fvec3_length_sq(fvec3_sub(s->cam.pos, positions[j]));
+                if (a < b)
+                {
+                    FVec3 temp = positions[i];
+                    positions[i] = positions[j];
+                    positions[j] = temp;
+                }
+            }
+        }
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        if (s->debug_transparent_order)
+            glUseProgram(s->unlit_shader);
+        else
+            glUseProgram(s->transparent_shader);
+        glBindTextureUnit(0, s->window_texture);
+        for (int i = 0; i < ARRAY_LENGTH(positions); i++)
+        {
+            ExamplePerObjectUBO per_object = {0};
+            per_object.model = mat4_translation(positions[i]);
+            float c = 1.f - (float)i / (float)(ARRAY_LENGTH(positions) - 1);
+            per_object.color = (FVec3){c, c, c};
+            e_apply_per_object_ubo(e, &per_object);
+            r_vb_draw(&s->transparent_vb);
+        }
+
+        glEnable(GL_CULL_FACE);
+    }
 }

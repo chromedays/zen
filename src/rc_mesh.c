@@ -47,6 +47,22 @@ Mesh rc_mesh_make_raw2(int vertices_count,
     return result;
 }
 
+Mesh rc_mesh_make_quad()
+{
+    Vertex vertices[] = {
+        {{-0.5f, -0.5f, 0}, {0, 0}, {0, 0, 1}},
+        {{0.5f, -0.5f, 0}, {1, 0}, {0, 0, 1}},
+        {{0.5f, 0.5f, 0}, {1, 1}, {0, 0, 1}},
+        {{-0.5f, 0.5f, 0}, {0, 1}, {0, 0, 1}},
+    };
+
+    uint indices[] = {0, 1, 2, 2, 3, 0};
+
+    Mesh result = rc_mesh_make_raw2(ARRAY_LENGTH(vertices),
+                                    ARRAY_LENGTH(indices), vertices, indices);
+    return result;
+}
+
 Mesh rc_mesh_make_cube()
 {
     // clang-format off

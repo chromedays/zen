@@ -5,7 +5,7 @@ in VertexOut
     vec2 uv;
 };
 
-out vec3 out_color;
+out vec4 out_color;
 
 #define DIFFUSE_MAP u_samplers[0]
 #define SPECULAR_MAP u_samplers[1]
@@ -38,7 +38,5 @@ void main()
         }
     }
 
-    out_color = color;
-
-    //out_color = (n + vec3(1)) * 0.5;
+    out_color = vec4(color, 1);
 }

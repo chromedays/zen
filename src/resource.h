@@ -41,6 +41,7 @@ Mesh rc_mesh_make_raw2(int vertices_count,
                        int indices_count,
                        Vertex* vertices,
                        uint* indices);
+Mesh rc_mesh_make_quad();
 Mesh rc_mesh_make_cube();
 Mesh rc_mesh_make_sphere(float radius, int slices_count, int stacks_count);
 bool rc_mesh_load_from_obj(Mesh* mesh, const char* filename);
