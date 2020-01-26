@@ -8,8 +8,8 @@
 
 typedef struct Phong_
 {
-    Mesh plane_mesh;
-    VertexBuffer plane_vb;
+    Mesh cube_mesh;
+    VertexBuffer cube_vb;
     GLuint diffuse_map;
     GLuint specular_map;
     Mesh light_source_mesh;
@@ -42,8 +42,8 @@ EXAMPLE_INIT_FN_SIG(phong)
     s->plane_mesh = rc_mesh_make_raw2(ARRAY_LENGTH(vertices),
                                       ARRAY_LENGTH(indices), vertices, indices);
 #endif
-    s->plane_mesh = rc_mesh_make_cube();
-    r_vb_init(&s->plane_vb, &s->plane_mesh, GL_TRIANGLES);
+    s->cube_mesh = rc_mesh_make_cube();
+    r_vb_init(&s->cube_vb, &s->cube_mesh, GL_TRIANGLES);
     s->diffuse_map = e_texture_load(e, "box_diffuse.png");
     s->specular_map = e_texture_load(e, "box_specular.png");
 
@@ -102,8 +102,8 @@ EXAMPLE_CLEANUP_FN_SIG(phong)
 {
     Example* e = (Example*)udata;
     Phong* s = (Phong*)e->scene;
-    rc_mesh_cleanup(&s->plane_mesh);
-    r_vb_cleanup(&s->plane_vb);
+    rc_mesh_cleanup(&s->cube_mesh);
+    r_vb_cleanup(&s->cube_vb);
     glDeleteTextures(1, &s->diffuse_map);
     glDeleteTextures(1, &s->specular_map);
     rc_mesh_cleanup(&s->light_source_mesh);
@@ -132,7 +132,7 @@ void draw_cubes(const Example* e, const Phong* s, bool is_outline)
         per_object.model = mat4_mul(&trans, &per_object.model);
         per_object.color = (FVec3){1, 0, 0};
         e_apply_per_object_ubo(e, &per_object);
-        r_vb_draw(&s->plane_vb);
+        r_vb_draw(&s->cube_vb);
     }
 }
 
