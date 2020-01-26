@@ -27,6 +27,9 @@ typedef struct Graph_
 
     float coeffs[MAX_DEGREE + 1];
     int degree;
+
+    int dragged_point_index;
+    bool is_dragging;
 } Graph;
 
 void set_world_bound(Graph* s, const Input* input)
@@ -43,7 +46,7 @@ EXAMPLE_INIT_FN_SIG(graph)
 
     s->point_mesh = rc_mesh_make_sphere(0.5f, 32, 32);
     r_vb_init(&s->point_vb, &s->point_mesh, GL_TRIANGLES);
-    s->point_radius = 10;
+    s->point_radius = 12;
 
     s->unlit_shader = e_shader_load(e, "unlit");
 
@@ -68,6 +71,8 @@ EXAMPLE_INIT_FN_SIG(graph)
     r_vb_init(&s->canvas_vb, &s->canvas_mesh, GL_TRIANGLES);
 
     s->degree = 1;
+
+    s->dragged_point_index = -1;
 
     return e;
 }
@@ -109,6 +114,15 @@ static FVec2 graph_to_world(const Graph* s, FVec2 gp)
     return wp;
 }
 
+static float world_to_graph_y(const Graph* s, float wy)
+{
+    wy = HIMATH_CLAMP(wy, s->world_min.y, s->world_max.y) - s->world_min.y;
+    float gy = (s->graph_max.y - s->graph_min.y) /
+                   (s->world_max.y - s->world_min.y) * wy -
+               3.f;
+    return gy;
+}
+
 static FVec2 get_world_mouse_pos(const Input* input)
 {
     FVec2 wmp = {(float)input->mouse_pos.x,
@@ -132,7 +146,8 @@ static int get_point_index_colliding_mouse(const Graph* s, const Input* input)
         FVec2 wp = graph_to_world(s, gp);
         FVec2 wmp = get_world_mouse_pos(input);
         FVec2 d = fvec2_sub(wp, wmp);
-        if ((d.x * d.x + d.y * d.y) <= (s->point_radius * s->point_radius))
+        if ((d.x * d.x + d.y * d.y) <=
+            ((s->point_radius * 1.5f) * (s->point_radius * 1.5f)))
         {
             index = i;
             break;
@@ -148,6 +163,25 @@ EXAMPLE_UPDATE_FN_SIG(graph)
     Graph* s = (Graph*)e->scene;
 
     set_world_bound(s, input);
+
+    if (!s->is_dragging && input->mouse_down[0])
+    {
+        s->dragged_point_index = get_point_index_colliding_mouse(s, input);
+        if (s->dragged_point_index >= 0)
+            s->is_dragging = true;
+    }
+
+    if (s->is_dragging && !input->mouse_down[0])
+    {
+        s->is_dragging = false;
+        s->dragged_point_index = -1;
+    }
+
+    if (s->is_dragging)
+    {
+        s->coeffs[s->dragged_point_index] =
+            world_to_graph_y(s, get_world_mouse_pos(input).y);
+    }
 
     igSetNextWindowPos((ImVec2){0, 0}, ImGuiCond_Once, (ImVec2){0, 0});
     igBegin("Settings", NULL,
