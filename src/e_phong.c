@@ -114,6 +114,28 @@ EXAMPLE_CLEANUP_FN_SIG(phong)
     e_example_destroy(e);
 }
 
+void draw_cubes(const Example* e, const Phong* s, bool is_outline)
+{
+    FVec3 cube_positions[] = {{0.0f, 0.0f, 0.0f},    {2.0f, 5.0f, -15.0f},
+                              {-1.5f, -2.2f, -2.5f}, {-3.8f, -2.0f, -12.3f},
+                              {2.4f, -0.4f, -3.5f},  {-1.7f, 3.0f, -7.5f},
+                              {1.3f, -2.0f, -2.5f},  {1.5f, 2.0f, -2.5f},
+                              {1.5f, 0.2f, -1.5f},   {-1.3f, 1.0f, -1.5f}};
+    for (int i = 0; i < ARRAY_LENGTH(cube_positions); i++)
+    {
+        ExamplePerObjectUBO per_object = {0};
+        Mat4 trans = mat4_translation(cube_positions[i]);
+        float angle = (float)(i + 1) * 20.f * s->t;
+        Mat4 scale = is_outline ? mat4_scale(1.1f) : mat4_scale(1);
+        Mat4 rot = quat_to_matrix(quat_rotate((FVec3){1, 0.3f, 0.5f}, angle));
+        per_object.model = mat4_mul(&rot, &scale);
+        per_object.model = mat4_mul(&trans, &per_object.model);
+        per_object.color = (FVec3){1, 0, 0};
+        e_apply_per_object_ubo(e, &per_object);
+        r_vb_draw(&s->plane_vb);
+    }
+}
+
 EXAMPLE_UPDATE_FN_SIG(phong)
 {
     Example* e = (Example*)udata;
@@ -152,42 +174,26 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     per_frame.t = s->t;
     e_apply_per_frame_ubo(e, &per_frame);
 
-    glClearColor(0.1f, 0.1f, 0.1f, 1);
-    glClearDepth(1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
+    glClearDepth(1);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS);
+
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
-    if (s->draw_depth)
-        glUseProgram(s->depth_shader);
-    else
-        glUseProgram(s->phong_shader);
+    glEnable(GL_STENCIL_TEST);
+    glClearStencil(0);
+    glStencilMask(0xFF);
+    glStencilFunc(GL_EQUAL, 1, 0xFF);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
 
-    glBindTextureUnit(0, s->diffuse_map);
-    glBindTextureUnit(1, s->specular_map);
+    glClearColor(0.1f, 0.1f, 0.1f, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-    {
-        FVec3 cube_positions[] = {{0.0f, 0.0f, 0.0f},    {2.0f, 5.0f, -15.0f},
-                                  {-1.5f, -2.2f, -2.5f}, {-3.8f, -2.0f, -12.3f},
-                                  {2.4f, -0.4f, -3.5f},  {-1.7f, 3.0f, -7.5f},
-                                  {1.3f, -2.0f, -2.5f},  {1.5f, 2.0f, -2.5f},
-                                  {1.5f, 0.2f, -1.5f},   {-1.3f, 1.0f, -1.5f}};
-        for (int i = 0; i < ARRAY_LENGTH(cube_positions); i++)
-        {
-            ExamplePerObjectUBO per_object = {0};
-            Mat4 trans = mat4_translation(cube_positions[i]);
-            float angle = (float)(i + 1) * 20.f * s->t;
-            Mat4 rot =
-                quat_to_matrix(quat_rotate((FVec3){1, 0.3f, 0.5f}, angle));
-            per_object.model = mat4_mul(&trans, &rot);
-            per_object.color = (FVec3){1, 0, 0};
-            e_apply_per_object_ubo(e, &per_object);
-            r_vb_draw(&s->plane_vb);
-        }
-    }
-
+    glStencilMask(0x00);
+    glStencilFunc(GL_ALWAYS, 1, 0xFF);
     if (s->draw_depth)
         glUseProgram(s->depth_shader);
     else
@@ -200,4 +206,25 @@ EXAMPLE_UPDATE_FN_SIG(phong)
         e_apply_per_object_ubo(e, &per_object);
         r_vb_draw(&s->light_source_vb);
     }
+
+    if (s->draw_depth)
+        glUseProgram(s->depth_shader);
+    else
+        glUseProgram(s->phong_shader);
+
+    glBindTextureUnit(0, s->diffuse_map);
+    glBindTextureUnit(1, s->specular_map);
+
+    glStencilMask(0xFF);
+    glStencilFunc(GL_ALWAYS, 1, 0xFF);
+    glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
+    draw_cubes(e, s, false);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
+    glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+    glStencilMask(0x00);
+    glDisable(GL_DEPTH_TEST);
+    glUseProgram(s->unlit_shader);
+    draw_cubes(e, s, true);
+    glEnable(GL_DEPTH_TEST);
 }

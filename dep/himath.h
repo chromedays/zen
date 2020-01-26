@@ -570,11 +570,8 @@ HIMATH_ATTRIB Mat4 mat4_ortho(float right,
     // clang-format off
     Mat4 result = {2.f / (right - left), 0.f, 0.f, 0.f, //
                    0.f, 2.f / (top - bottom), 0.f, 0.f, //
-                   0.f, 0.f, -2.f / (far_z - near_z), -1.f, //
-                   -(right + left) / (right - left),
-                   -(top + bottom) / (top - bottom),
-                   -(far_z + near_z) / (far_z - near_z),
-                   1.f};
+                   0.f, 0.f, -2.f / (far_z - near_z), 0.f, //
+                   -(right + left) / (right - left), -(top + bottom) / (top - bottom), -(far_z + near_z) / (far_z - near_z), 1.f};
     // clang-format on
 
     return result;
