@@ -95,5 +95,6 @@ EXAMPLE_DECL(phong);
 EXAMPLE_DECL(simple_lights);
 EXAMPLE_DECL(normal_mapping);
 EXAMPLE_DECL(hdr);
+EXAMPLE_DECL(depth_peeling);
 
 #endif // EXAMPLE_H
