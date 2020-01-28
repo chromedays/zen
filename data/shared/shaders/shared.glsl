@@ -12,7 +12,7 @@ struct PhongLight
     float quadratic;
 };
 
-#define MAX_PHONG_LIGHTS_COUNT 10
+#define MAX_PHONG_LIGHTS_COUNT 100
 
 layout (binding = 0, std140) uniform PerFrame
 {
