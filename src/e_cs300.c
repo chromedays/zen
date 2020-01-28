@@ -100,79 +100,13 @@ static void try_switch_model(CS300* s, int new_model_index)
             &s->model_mesh, s->model_file_paths[new_model_index].abs_path_str);
         // Need to compute normals manually
         if (fvec3_length_sq(s->model_mesh.vertices[0].normal) == 0.f)
-        {
-            if (s->model_mesh.indices_count != 0)
-            {
-                for (int i = 0; i < s->model_mesh.indices_count; i += 3)
-                {
-                    Vertex* v0 =
-                        &s->model_mesh.vertices[s->model_mesh.indices[i]];
-                    Vertex* v1 =
-                        &s->model_mesh.vertices[s->model_mesh.indices[i + 1]];
-                    Vertex* v2 =
-                        &s->model_mesh.vertices[s->model_mesh.indices[i + 2]];
+            rc_mesh_set_approximate_normals(&s->model_mesh);
 
-                    FVec3 e0 = fvec3_sub(v1->pos, v0->pos);
-                    FVec3 e1 = fvec3_sub(v2->pos, v0->pos);
+        NormalizedTransform model_normalized_transform =
+            rc_mesh_calc_normalized_transform(&s->model_mesh);
 
-                    // Normal with weight
-                    FVec3 weight = fvec3_cross(e0, e1);
-
-                    v0->normal = fvec3_add(v0->normal, weight);
-                    v1->normal = fvec3_add(v1->normal, weight);
-                    v2->normal = fvec3_add(v2->normal, weight);
-                }
-            }
-            else
-            {
-                for (int i = 0; i < s->model_mesh.vertices_count; i += 3)
-                {
-                    Vertex* v0 = &s->model_mesh.vertices[i];
-                    Vertex* v1 = &s->model_mesh.vertices[i + 1];
-                    Vertex* v2 = &s->model_mesh.vertices[i + 2];
-
-                    FVec3 e0 = fvec3_sub(v1->pos, v0->pos);
-                    FVec3 e1 = fvec3_sub(v2->pos, v0->pos);
-
-                    // Normal with weight
-                    FVec3 weight = fvec3_cross(e0, e1);
-
-                    v0->normal = fvec3_add(v0->normal, weight);
-                    v1->normal = fvec3_add(v1->normal, weight);
-                    v2->normal = fvec3_add(v2->normal, weight);
-                }
-            }
-
-            for (int i = 0; i < s->model_mesh.vertices_count; i++)
-            {
-                Vertex* v = &s->model_mesh.vertices[i];
-                v->normal = fvec3_normalize(v->normal);
-            }
-        }
-
-        FVec3 bb_min = s->model_mesh.vertices[0].pos;
-        FVec3 bb_max = s->model_mesh.vertices[0].pos;
-        for (int j = 1; j < s->model_mesh.vertices_count; j++)
-        {
-            FVec3 pos = s->model_mesh.vertices[j].pos;
-            if (bb_min.x > pos.x)
-                bb_min.x = pos.x;
-            if (bb_min.y > pos.y)
-                bb_min.y = pos.y;
-            if (bb_min.z > pos.z)
-                bb_min.z = pos.z;
-
-            if (bb_max.x < pos.x)
-                bb_max.x = pos.x;
-            if (bb_max.y < pos.y)
-                bb_max.y = pos.y;
-            if (bb_max.z < pos.z)
-                bb_max.z = pos.z;
-        }
-
-        s->model_scale = 1.f / fvec3_length(fvec3_sub(bb_max, bb_min));
-        s->model_pos = fvec3_negate(fvec3_mulf(
-            fvec3_mulf(fvec3_add(bb_min, bb_max), 0.5f), s->model_scale));
+        s->model_scale = model_normalized_transform.scale;
+        s->model_pos = model_normalized_transform.pos;
 
         r_vb_init(&s->model_vb, &s->model_mesh, GL_TRIANGLES);
 
@@ -238,7 +172,7 @@ EXAMPLE_INIT_FN_SIG(cs300)
     s->light_source_shader = e_shader_load(e, "light_source");
 
     s->orbit_speed_deg = 30;
-    s->orbit_radius = 0.5f;
+    s->orbit_radius = 1;
 
     s->cam.pos.z = 2;
 
