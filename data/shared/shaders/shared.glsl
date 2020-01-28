@@ -116,7 +116,7 @@ vec3 calc_phong(vec3 normal, vec3 frag_pos)
     for (int i = 0; i < u_phong_lights_count; i++)
     {
         PhongLight light = u_phong_lights[i];
-        vec3 ka = vec3(0.1);
+        vec3 ka = vec3(0);
         vec3 kd = vec3(0.9, 0.9, 0.9);
         vec3 ks = vec3(0.9, 0.9, 0.9);
         //vec3 kd = texture(DIFFUSE_MAP, uv).rgb;
