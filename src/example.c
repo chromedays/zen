@@ -39,6 +39,16 @@ void e_example_destroy(Example* e)
     free(e);
 }
 
+Mesh e_mesh_load_from_obj(const Example* e, const char* obj_filename)
+{
+    Path path = fs_path_make_working_dir();
+    fs_path_append3(&path, "shared", "models", obj_filename);
+    Mesh result = {0};
+
+    ASSERT(rc_mesh_load_from_obj(&result, path.abs_path_str));
+    return result;
+}
+
 GLuint e_shader_load(const Example* e, const char* shader_name)
 {
     PRINTLN("Building shader (%s)...", shader_name);
