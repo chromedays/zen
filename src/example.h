@@ -58,7 +58,7 @@ typedef struct ExamplePhongLight_
     ALIGN_AS(4) float quadratic;
 } ExamplePhongLight;
 
-#define MAX_PHONG_LIGHTS_COUNT 10
+#define MAX_PHONG_LIGHTS_COUNT 100
 
 typedef struct ExamplePerFrameUBO_
 {
