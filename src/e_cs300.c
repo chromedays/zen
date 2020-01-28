@@ -9,7 +9,7 @@
 #include <math.h>
 
 #define MAX_MODEL_FILES_COUNT 100
-#define MAX_LIGHT_SOURCES_COUNT 10
+#define MAX_LIGHT_SOURCES_COUNT 100
 
 typedef struct LightSource_
 {
@@ -54,7 +54,9 @@ typedef struct CS300_
     LightSource light_sources[MAX_LIGHT_SOURCES_COUNT];
     int light_sources_count;
     uint light_source_shader;
+    float light_intensity;
 
+    FVec3 orbit_pos;
     float orbit_speed_deg;
     float orbit_radius;
 
@@ -74,6 +76,8 @@ typedef struct CS300_
     DrawMode draw_mode;
 
     bool copy_depth;
+    IVec2 models_count;
+    IVec2 orbits_count;
 } CS300;
 
 static FILE_FOREACH_FN_DECL(push_model_filename)
@@ -126,6 +130,29 @@ static float get_channel_function2(float x, float period)
     return (0.5f * cosf(coeff * (x + period * 0.5f)) + 0.5f);
 }
 
+static void update_light_colors(CS300* s)
+{
+    // Smoothly interpolate from red to green to blue
+    for (int i = 0; i < s->light_sources_count; i++)
+    {
+        float period = (float)(s->light_sources_count - 1) * 0.666666f;
+
+        float rx1 = HIMATH_CLAMP((float)i, 0, period * 0.5f);
+        float rx2 = HIMATH_CLAMP((float)i, period, period * 1.5f);
+        float gx = HIMATH_CLAMP((float)i, 0, period);
+        float bx = HIMATH_CLAMP((float)i, period * 0.5f, period * 1.5f);
+
+        float r = get_channel_function1(rx1, period) +
+                  get_channel_function2(rx2, period);
+        float g = get_channel_function2(gx, period);
+        float b = get_channel_function1(bx, period);
+
+        s->light_sources[i].color.x = r * s->light_intensity;
+        s->light_sources[i].color.y = g * s->light_intensity;
+        s->light_sources[i].color.z = b * s->light_intensity;
+    }
+}
+
 EXAMPLE_INIT_FN_SIG(cs300)
 {
     Example* e = e_example_make("cs300", sizeof(CS300));
@@ -146,28 +173,9 @@ EXAMPLE_INIT_FN_SIG(cs300)
     r_vb_init(&s->light_source_vb, &s->light_source_mesh, GL_TRIANGLES);
     s->light_sources_count = 8;
 
-    // Smoothly interpolate from red to green to blue
-    for (int i = 0; i < s->light_sources_count; i++)
-    {
-        float period = (float)(s->light_sources_count - 1) * 0.666666f;
+    s->light_intensity = 0.4f;
 
-        float rx1 = HIMATH_CLAMP((float)i, 0, period * 0.5f);
-        float rx2 = HIMATH_CLAMP((float)i, period, period * 1.5f);
-        float gx = HIMATH_CLAMP((float)i, 0, period);
-        float bx = HIMATH_CLAMP((float)i, period * 0.5f, period * 1.5f);
-
-        float r = get_channel_function1(rx1, period) +
-                  get_channel_function2(rx2, period);
-        float g = get_channel_function2(gx, period);
-        float b = get_channel_function1(bx, period);
-
-        float intensity = 0.4f;
-
-        s->light_sources[i].color.x = r * intensity;
-        s->light_sources[i].color.y = g * intensity;
-        s->light_sources[i].color.z = b * intensity;
-    }
-    // s->light_sources[0].color = (FVec3){1, 0, 0};
+    update_light_colors(s);
 
     s->light_source_shader = e_shader_load(e, "light_source");
 
@@ -243,6 +251,10 @@ EXAMPLE_INIT_FN_SIG(cs300)
         e_shader_load(e, "phong_deferred_second_pass");
 
     s->copy_depth = true;
+    s->models_count.x = 1;
+    s->models_count.y = 1;
+    s->orbits_count.x = 1;
+    s->orbits_count.y = 1;
 
     return e;
 }
@@ -286,8 +298,10 @@ static void update_light_source_transforms(CS300* s)
                      s->t * s->orbit_speed_deg);
         float rad = degtorad(deg);
         FVec3 pos = {
-            .x = cosf(rad) * s->orbit_radius,
-            .z = sinf(rad) * s->orbit_radius,
+            .x = cosf(rad) * s->orbit_radius +
+                 (float)(s->models_count.x - 1) * 0.5f,
+            .z = sinf(rad) * s->orbit_radius +
+                 (float)(s->models_count.y - 1) * 0.5f,
         };
         s->light_sources[i].pos = pos;
     }
@@ -331,20 +345,24 @@ static void draw_deferred_objects(Example* e, const CS300* s)
 
     if (s->current_model_index >= 0)
     {
-        ExamplePerObjectUBO per_object = {0};
-        Mat4 scale_mat = mat4_scale(s->model_scale);
-#if 0
-        Mat4 rot_mat =
-            quat_to_matrix(quat_rotate((FVec3){0, 1, 0}, 90.f * s->t));
-#else
-        Mat4 rot_mat = mat4_identity();
-#endif
-        Mat4 trans_mat = mat4_translation(s->model_pos);
-        per_object.model = mat4_mul(&trans_mat, &scale_mat);
-        per_object.model = mat4_mul(&rot_mat, &per_object.model);
-        e_apply_per_object_ubo(e, &per_object);
         glUseProgram(s->deferred_first_pass_shader);
-        r_vb_draw(&s->model_vb);
+
+        for (int z = 0; z < s->models_count.y; z++)
+        {
+            for (int x = 0; x < s->models_count.x; x++)
+            {
+                FVec3 scene_offset = {(float)x * 1.1f, 0, (float)z * 1.1f};
+                ExamplePerObjectUBO per_object = {0};
+                Mat4 scale_mat = mat4_scale(s->model_scale);
+                Mat4 rot_mat = mat4_identity();
+                Mat4 trans_mat =
+                    mat4_translation(fvec3_add(s->model_pos, scene_offset));
+                per_object.model = mat4_mul(&trans_mat, &scale_mat);
+                per_object.model = mat4_mul(&rot_mat, &per_object.model);
+                e_apply_per_object_ubo(e, &per_object);
+                r_vb_draw(&s->model_vb);
+            }
+        }
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -465,11 +483,21 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
             if (igCheckbox("Copy Depth", &s->copy_depth))
             {
             }
+
+            igSliderInt("Models Count X", &s->models_count.x, 1, 100, "%d");
+            igSliderInt("Models Count Y", &s->models_count.y, 1, 100, "%d");
+            igSliderFloat("Light intensity", &s->light_intensity, 0.4f, 1,
+                          "%.3f", 1);
+            igSliderInt("Light sources count", &s->light_sources_count, 8, 100,
+                        "%d");
+            igSliderFloat("Orbit radius", &s->orbit_radius, 1, 100, "%.3f", 1);
         }
     }
     igEnd();
 
     e_fpscam_update(&s->cam, input, 5);
+
+    update_light_colors(s);
 
     s->t += input->dt;
 
