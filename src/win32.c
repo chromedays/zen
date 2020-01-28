@@ -37,17 +37,37 @@ LRESULT CALLBACK win32_message_callback(HWND window,
     switch (msg)
     {
     case WM_LBUTTONDOWN:
-    case WM_LBUTTONDBLCLK: g_input->mouse_down[0] = true; break;
-    case WM_LBUTTONUP: g_input->mouse_down[0] = false; break;
-    case WM_RBUTTONDOWN: SetCursor(NULL);
-    case WM_RBUTTONDBLCLK: g_input->mouse_down[1] = true; break;
+        if (GetCapture() == NULL)
+            SetCapture(window);
+        g_input->mouse_down[0] = true;
+        break;
+    case WM_LBUTTONUP:
+        if (GetCapture() == window)
+            ReleaseCapture();
+        g_input->mouse_down[0] = false;
+        break;
+    case WM_RBUTTONDOWN:
+        if (GetCapture() == NULL)
+            SetCapture(window);
+        SetCursor(NULL);
+        g_input->mouse_down[1] = true;
+        break;
     case WM_RBUTTONUP:
-        g_input->mouse_down[1] = false;
+        if (GetCapture() == window)
+            ReleaseCapture();
         SetCursor(g_cursor);
+        g_input->mouse_down[1] = false;
         break;
     case WM_MBUTTONDOWN:
-    case WM_MBUTTONDBLCLK: g_input->mouse_down[2] = true; break;
-    case WM_MBUTTONUP: g_input->mouse_down[2] = false; break;
+        if (GetCapture() == NULL)
+            SetCapture(window);
+        g_input->mouse_down[2] = true;
+        break;
+    case WM_MBUTTONUP:
+        if (GetCapture() == window)
+            ReleaseCapture();
+        g_input->mouse_down[2] = false;
+        break;
 
     case WM_SYSKEYDOWN:
     case WM_KEYDOWN:
@@ -235,13 +255,17 @@ static HGLRC win32_gl_context_make(HDC dc,
         .iPixelType = PFD_TYPE_RGBA,
         .cColorBits = 32,
         .cDepthBits = 24,
-        .cStencilBits = 8};
+        .cStencilBits = 8,
+    };
 
-    int pixelformat_dummy = ChoosePixelFormat(dc, &pfd_dummy);
-    SetPixelFormat(dc, pixelformat_dummy, &pfd_dummy);
+    HWND window_dummy = CreateWindowExA(0, WIN32_CLASS_NAME, "DUMMY", 0, 0, 0,
+                                        100, 100, NULL, NULL, NULL, NULL);
+    HDC dc_dummy = GetDC(window_dummy);
+    int pixelformat_dummy = ChoosePixelFormat(dc_dummy, &pfd_dummy);
+    SetPixelFormat(dc_dummy, pixelformat_dummy, &pfd_dummy);
 
-    HGLRC rc_dummy = wglCreateContext(dc);
-    wglMakeCurrent(dc, rc_dummy);
+    HGLRC rc_dummy = wglCreateContext(dc_dummy);
+    wglMakeCurrent(dc_dummy, rc_dummy);
 
     ASSERT(wglGetCurrentContext());
 
@@ -259,6 +283,10 @@ static HGLRC win32_gl_context_make(HDC dc,
                                   depth_bits,
                                   WGL_STENCIL_BITS_ARB,
                                   stencil_bits,
+                                  WGL_SAMPLE_BUFFERS_ARB,
+                                  GL_TRUE,
+                                  WGL_SAMPLES_ARB,
+                                  4,
                                   0};
     int context_attribs[] = {WGL_CONTEXT_MAJOR_VERSION_ARB,
                              major_version,
@@ -273,6 +301,8 @@ static HGLRC win32_gl_context_make(HDC dc,
 
     wglMakeCurrent(NULL, NULL);
     wglDeleteContext(rc_dummy);
+    ReleaseDC(window_dummy, dc_dummy);
+    DestroyWindow(window_dummy);
 
     int pixelformat;
     uint format_count;

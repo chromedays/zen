@@ -177,6 +177,8 @@ EXAMPLE_UPDATE_FN_SIG(phong)
     per_frame.t = s->t;
     e_apply_per_frame_ubo(e, &per_frame);
 
+    glEnable(GL_MULTISAMPLE);
+
     glEnable(GL_DEPTH_TEST);
     glClearDepth(1);
     glDepthMask(GL_TRUE);
