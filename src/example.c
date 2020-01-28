@@ -209,8 +209,9 @@ void e_fpscam_update(ExampleFpsCamera* cam, const Input* input, float speed)
 
     if (input->mouse_down[1])
     {
-        cam->yaw_deg += (float)input->mouse_delta.x * 0.5f;
+        cam->yaw_deg -= (float)input->mouse_delta.x * 0.5f;
         cam->pitch_deg -= (float)input->mouse_delta.y * 0.5f;
+        cam->pitch_deg = HIMATH_CLAMP(cam->pitch_deg, -89, 89);
     }
 
     FVec3 look = e_fpscam_get_look(cam);
@@ -227,11 +228,11 @@ void e_fpscam_update(ExampleFpsCamera* cam, const Input* input, float speed)
 FVec3 e_fpscam_get_look(const ExampleFpsCamera* cam)
 {
     FVec3 look;
-    float yaw_rad = degtorad(cam->yaw_deg);
+    float yaw_rad = degtorad(cam->yaw_deg + 180);
     float pitch_rad = degtorad(cam->pitch_deg);
     look.x = sinf(yaw_rad) * cosf(pitch_rad);
     look.y = sinf(pitch_rad);
-    look.z = -cosf(yaw_rad);
+    look.z = cosf(yaw_rad) * cosf(pitch_rad);
     look = fvec3_normalize(look);
 
     return look;
