@@ -19,8 +19,7 @@ typedef struct NormalMapping_
 
 EXAMPLE_INIT_FN_SIG(normal_mapping)
 {
-    Example* e =
-        (Example*)e_example_make("normal_mapping", sizeof(NormalMapping));
+    Example* e = (Example*)e_example_make("normal_mapping", NormalMapping);
     NormalMapping* s = (NormalMapping*)e->scene;
 
     Vertex vertices[] = {

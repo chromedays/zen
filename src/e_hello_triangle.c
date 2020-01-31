@@ -13,7 +13,7 @@ typedef struct HelloTriangle_
 
 EXAMPLE_INIT_FN_SIG(hello_triangle)
 {
-    Example* e = e_example_make("hello_triangle", sizeof(HelloTriangle));
+    Example* e = e_example_make("hello_triangle", HelloTriangle);
     HelloTriangle* scene = (HelloTriangle*)e->scene;
 
     FVec3 vertices[] = {

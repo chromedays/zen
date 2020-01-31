@@ -35,7 +35,7 @@ typedef struct Phong_
 
 EXAMPLE_INIT_FN_SIG(phong)
 {
-    Example* e = (Example*)e_example_make("phong", sizeof(Phong));
+    Example* e = (Example*)e_example_make("phong", Phong);
     Phong* s = (Phong*)e->scene;
 
     s->cube_mesh = rc_mesh_make_cube();

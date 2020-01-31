@@ -8,9 +8,11 @@
 #include <stdlib.h>
 #include <math.h>
 
-Example* e_example_make(const char* name, size_t scene_size)
+Example*
+    e_example_make_impl(const char* name, size_t scene_size, size_t scene_align)
 {
-    Example* e = calloc(1, sizeof(Example) + scene_size);
+    void* mem = calloc(1, sizeof(Example) + scene_size + scene_align);
+    Example* e = (Example*)mem;
     e->name = name;
 
     glGenBuffers(1, &e->per_frame_ubo);
@@ -27,7 +29,9 @@ Example* e_example_make(const char* name, size_t scene_size)
 
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-    e->scene = e + 1;
+    uint8_t* scene_mem = (uint8_t*)mem + sizeof(Example);
+    scene_mem += (scene_align - ((uintptr_t)scene_mem % scene_align));
+    e->scene = scene_mem;
 
     return e;
 }

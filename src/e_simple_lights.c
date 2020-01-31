@@ -17,7 +17,7 @@ typedef struct SimpleLights_
 
 EXAMPLE_INIT_FN_SIG(simple_lights)
 {
-    Example* e = e_example_make("simple_lights", sizeof(SimpleLights));
+    Example* e = e_example_make("simple_lights", SimpleLights);
     SimpleLights* scene = (SimpleLights*)e->scene;
 
     ASSERT(rc_mesh_load_from_obj(&scene->mesh, "shared/models/dragon.obj"));

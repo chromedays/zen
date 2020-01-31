@@ -11,7 +11,7 @@ typedef struct HDR_
 
 EXAMPLE_INIT_FN_SIG(hdr)
 {
-    Example* e = (Example*)e_example_make("hdr", sizeof(HDR));
+    Example* e = (Example*)e_example_make("hdr", HDR);
     HDR* s = (HDR*)e->scene;
 
     {

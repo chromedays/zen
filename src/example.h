@@ -30,7 +30,11 @@ typedef struct Example_
     void* scene;
 } Example;
 
-Example* e_example_make(const char* name, size_t scene_size);
+#define e_example_make(name, scene_type)                                       \
+    e_example_make_impl(name, sizeof(scene_type), ALIGN_OF(scene_type))
+Example* e_example_make_impl(const char* name,
+                             size_t scene_size,
+                             size_t scene_align);
 void e_example_destroy(Example* e);
 
 Mesh e_mesh_load_from_obj(const Example* e, const char* obj_filename);

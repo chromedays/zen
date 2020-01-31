@@ -18,7 +18,7 @@ typedef struct HelloMesh_
 
 EXAMPLE_INIT_FN_SIG(hello_mesh)
 {
-    Example* e = (Example*)e_example_make("hello_mesh", sizeof(HelloMesh));
+    Example* e = (Example*)e_example_make("hello_mesh", HelloMesh);
     HelloMesh* scene = (HelloMesh*)e->scene;
 
     ASSERT(rc_mesh_load_from_obj(&scene->mesh, "shared/models/dragon.obj"));
