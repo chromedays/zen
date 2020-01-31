@@ -11,6 +11,10 @@ typedef struct ImageProcessing_
     GLuint texture;
     VertexBuffer vb;
     GLuint shader;
+
+    GLuint sampler_nearest;
+    GLuint sampler_bilinear;
+    GLuint current_sampler;
 } ImageProcessing;
 
 static GLuint load_ppm(const char* filename)
@@ -87,6 +91,24 @@ EXAMPLE_INIT_FN_SIG(image_processing)
 
     s->shader = e_shader_load(e, "image");
 
+    glGenSamplers(1, &s->sampler_nearest);
+    glSamplerParameteri(s->sampler_nearest, GL_TEXTURE_WRAP_S,
+                        GL_CLAMP_TO_EDGE);
+    glSamplerParameteri(s->sampler_nearest, GL_TEXTURE_WRAP_T,
+                        GL_CLAMP_TO_EDGE);
+    glSamplerParameteri(s->sampler_nearest, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glSamplerParameteri(s->sampler_nearest, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glGenSamplers(1, &s->sampler_bilinear);
+    glSamplerParameteri(s->sampler_bilinear, GL_TEXTURE_WRAP_S,
+                        GL_CLAMP_TO_EDGE);
+    glSamplerParameteri(s->sampler_bilinear, GL_TEXTURE_WRAP_T,
+                        GL_CLAMP_TO_EDGE);
+    glSamplerParameteri(s->sampler_bilinear, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glSamplerParameteri(s->sampler_bilinear, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    s->current_sampler = s->sampler_nearest;
+
     return e;
 }
 
@@ -105,9 +127,36 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
     Example* e = (Example*)udata;
     ImageProcessing* s = (ImageProcessing*)e->scene;
 
+    igSetNextWindowPos((ImVec2){0, 0}, ImGuiCond_Once, (ImVec2){0, 0});
+    igBegin("Control Panel", NULL,
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_AlwaysAutoResize);
+    if (igCollapsingHeader("Texture Sampling Method ",
+                           ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (igRadioButtonBool("Nearest",
+                              s->current_sampler == s->sampler_nearest))
+        {
+            s->current_sampler = s->sampler_nearest;
+        }
+        igSameLine(0, -1);
+        if (igRadioButtonBool("Bilinear",
+                              s->current_sampler == s->sampler_bilinear))
+        {
+            s->current_sampler = s->sampler_bilinear;
+        }
+    }
+
+    if (igCollapsingHeader("Another", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+    }
+    igEnd();
+
     glViewport(0, 0, input->window_size.x, input->window_size.y);
     glClear(GL_COLOR_BUFFER_BIT);
     glUseProgram(s->shader);
     glBindTextureUnit(0, s->texture);
+    glBindSampler(0, s->current_sampler);
+
     r_vb_draw(&s->vb);
 }
