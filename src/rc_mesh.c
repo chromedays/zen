@@ -47,13 +47,13 @@ Mesh rc_mesh_make_raw2(int vertices_count,
     return result;
 }
 
-Mesh rc_mesh_make_quad()
+Mesh rc_mesh_make_quad(float size)
 {
     Vertex vertices[] = {
-        {{-0.5f, -0.5f, 0}, {0, 0}, {0, 0, 1}},
-        {{0.5f, -0.5f, 0}, {1, 0}, {0, 0, 1}},
-        {{0.5f, 0.5f, 0}, {1, 1}, {0, 0, 1}},
-        {{-0.5f, 0.5f, 0}, {0, 1}, {0, 0, 1}},
+        {{-0.5f * size, -0.5f * size, 0}, {0, 0}, {0, 0, 1}},
+        {{0.5f * size, -0.5f * size, 0}, {1, 0}, {0, 0, 1}},
+        {{0.5f * size, 0.5f * size, 0}, {1, 1}, {0, 0, 1}},
+        {{-0.5f * size, 0.5f * size, 0}, {0, 1}, {0, 0, 1}},
     };
 
     uint indices[] = {0, 1, 2, 2, 3, 0};
