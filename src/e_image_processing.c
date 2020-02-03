@@ -142,6 +142,49 @@ static const char* g_op_str[OperationType_Count] = {
     "", "Addition", "Subtraction", "Product", "Negative", "Log", "Power",
 };
 
+typedef struct OperationContext_ OperationContext;
+
+#define OP_TRANSFORM_FN_DECL(name)                                             \
+    float name(const OperationContext* op, const Image* images, float* values)
+typedef OP_TRANSFORM_FN_DECL(OpTransformFn);
+
+OP_TRANSFORM_FN_DECL(op_transform_add)
+{
+    float result = HIMATH_CLAMP(values[0] + values[1], 0, 1);
+    return result;
+}
+
+OP_TRANSFORM_FN_DECL(op_transform_sub)
+{
+    float result = HIMATH_CLAMP(values[0] - values[1], 0, 1);
+    return result;
+}
+
+OP_TRANSFORM_FN_DECL(op_transform_product)
+{
+    float result = HIMATH_CLAMP(values[0] * values[1], 0, 1);
+    return result;
+}
+
+OP_TRANSFORM_FN_DECL(op_transform_negative)
+{
+    float result = HIMATH_CLAMP(1.f - values[0], 0, 1);
+    return result;
+}
+
+OP_TRANSFORM_FN_DECL(op_transform_log);
+OP_TRANSFORM_FN_DECL(op_transform_power);
+
+OpTransformFn* g_op_transform_vtable[OperationType_Count] = {
+    NULL,
+    &op_transform_add,
+    &op_transform_sub,
+    &op_transform_product,
+    &op_transform_negative,
+    &op_transform_log,
+    &op_transform_power,
+};
+
 typedef struct OperationContext_
 {
     OperationType type;
@@ -154,6 +197,29 @@ typedef struct OperationContext_
     float power_constant;
     float power_gamma;
 } OperationContext;
+
+OP_TRANSFORM_FN_DECL(op_transform_log)
+{
+    if (values[0] == 0)
+        return 0;
+
+    float log_2_value = log2f((float)images[0].max_color * values[0]);
+    float log_2_base = log2f(op->log_base);
+
+    float result = HIMATH_CLAMP((op->log_constant * log_2_value / log_2_base) /
+                                    images[0].max_color,
+                                0, 1);
+    return result;
+}
+
+OP_TRANSFORM_FN_DECL(op_transform_power)
+{
+    float power_value =
+        powf((float)images[0].max_color * values[0], op->power_gamma);
+    float result = HIMATH_CLAMP(
+        (op->power_constant * power_value) / images[0].max_color, 0, 1);
+    return result;
+}
 
 static bool op_is_image_selected(const OperationContext* op,
                                  const Path* image_filepath)
@@ -173,139 +239,50 @@ static void op_push_image_path(OperationContext* op, const Path* image_filepath)
     op->image_filepaths[op->image_filepaths_count++] = image_filepath;
 }
 
-static float op_transform_log(const OperationContext* op,
-                              const Image* image,
-                              float value)
-{
-    if (value == 0)
-        return 0;
-
-    float log_2_value = log2f((float)image->max_color * value);
-    float log_2_base = log2f(op->log_base);
-
-    float result = HIMATH_CLAMP(
-        (op->log_constant * log_2_value / log_2_base) / image->max_color, 0, 1);
-    return result;
-}
-
-static float op_transform_power(const OperationContext* op,
-                                const Image* image,
-                                float value)
-{
-    float power_value = powf((float)image->max_color * value, op->power_gamma);
-    float result = HIMATH_CLAMP(
-        (op->power_constant * power_value) / image->max_color, 0, 1);
-    return result;
-}
-
 static Image op_execute(const OperationContext* op)
 {
-    switch (op->type)
+    Image result = {
+        .max_color = 255,
+    };
+
+    if (op->image_filepaths_count > 0)
     {
-    case OperationType_Addition:
-    case OperationType_Subtraction:
-    case OperationType_Product: {
-        Image image0 =
-            image_load_from_ppm(op->image_filepaths[0]->abs_path_str);
-        Image image1 =
-            image_load_from_ppm(op->image_filepaths[1]->abs_path_str);
-        if (!image0.pixels || !image1.pixels)
+        Image images[ARRAY_LENGTH(op->image_filepaths)] = {0};
+        for (int i = 0; i < op->image_filepaths_count; i++)
         {
-            image_cleanup(&image0);
-            image_cleanup(&image1);
-            break;
+            images[i] =
+                image_load_from_ppm(op->image_filepaths[i]->abs_path_str);
+            result.w = HIMATH_MAX(result.w, images[i].w);
+            result.h = HIMATH_MAX(result.h, images[i].h);
         }
 
-        IVec2 common_image_size = {
-            HIMATH_MAX(image0.w, image1.w),
-            HIMATH_MAX(image0.h, image1.h),
-        };
-
-        Image result = {
-            .w = common_image_size.x,
-            .h = common_image_size.y,
-            .max_color = 255,
-        };
         result.pixels =
             (Pixel*)malloc(result.w * result.h * sizeof(*result.pixels));
 
-        for (int y = 0; y < common_image_size.y; y++)
+        for (int y = 0; y < result.h; y++)
         {
-            for (int x = 0; x < common_image_size.x; x++)
+            for (int x = 0; x < result.w; x++)
             {
                 FVec2 uv = {
-                    common_image_size.x <= 1 ?
-                        0 :
-                        (float)x / (common_image_size.x - 1),
-                    common_image_size.y <= 1 ?
-                        0 :
-                        (float)y / (common_image_size.y - 1),
+                    result.w <= 1 ? 0 : (float)x / (float)(result.w - 1),
+                    result.h <= 1 ? 0 : (float)y / (float)(result.h - 1),
                 };
-                Pixel c0 = image_sample_nearest(&image0, uv);
-                Pixel c1 = image_sample_nearest(&image1, uv);
-                switch (op->type)
+                float r[ARRAY_LENGTH(images)] = {0};
+                float g[ARRAY_LENGTH(images)] = {0};
+                float b[ARRAY_LENGTH(images)] = {0};
+
+                for (int i = 0; i < op->image_filepaths_count; i++)
                 {
-                case OperationType_Addition:
-                    result.pixels[y * result.w + x] = (Pixel){
-                        .r = HIMATH_CLAMP(c0.r + c1.r, 0, 1),
-                        .g = HIMATH_CLAMP(c0.g + c1.g, 0, 1),
-                        .b = HIMATH_CLAMP(c0.b + c1.b, 0, 1),
-                        .a = 1,
-                    };
-                    break;
-                case OperationType_Subtraction:
-                    result.pixels[y * result.w + x] = (Pixel){
-                        .r = HIMATH_CLAMP(c0.r - c1.r, 0, 1),
-                        .g = HIMATH_CLAMP(c0.g - c1.g, 0, 1),
-                        .b = HIMATH_CLAMP(c0.b - c1.b, 0, 1),
-                        .a = 1,
-                    };
-                    break;
-                case OperationType_Product:
-                    result.pixels[y * result.w + x] = (Pixel){
-                        .r = HIMATH_CLAMP(c0.r * c1.r, 0, 1),
-                        .g = HIMATH_CLAMP(c0.g * c1.g, 0, 1),
-                        .b = HIMATH_CLAMP(c0.b * c1.b, 0, 1),
-                        .a = 1,
-                    };
-                    break;
+                    Pixel c = image_sample_nearest(&images[i], uv);
+                    r[i] = c.r;
+                    g[i] = c.g;
+                    b[i] = c.b;
                 }
-            }
-        }
 
-        glGenTextures(1, &result.texture);
-        glBindTexture(GL_TEXTURE_2D, result.texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, result.w, result.h, 0,
-                     GL_RGBA, GL_FLOAT, result.pixels);
-        glBindTexture(GL_TEXTURE_2D, 0);
-
-        image_cleanup(&image0);
-        image_cleanup(&image1);
-
-        return result;
-    }
-    case OperationType_Negative: {
-        Image image = image_load_from_ppm(op->image_filepaths[0]->abs_path_str);
-        Image result = {
-            .w = image.w,
-            .h = image.h,
-            .max_color = 255,
-        };
-        result.pixels = malloc(result.w * result.h * sizeof(*result.pixels));
-
-        for (int y = 0; y < result.h; y++)
-        {
-            for (int x = 0; x < result.w; x++)
-            {
-                FVec2 uv = {
-                    result.w <= 1 ? 0 : (float)x / (result.w - 1),
-                    result.h <= 1 ? 0 : (float)y / (result.h - 1),
-                };
-                Pixel c = image_sample_nearest(&image, uv);
                 result.pixels[y * result.w + x] = (Pixel){
-                    .r = HIMATH_CLAMP(1.f - c.r, 0, 1),
-                    .g = HIMATH_CLAMP(1.f - c.g, 0, 1),
-                    .b = HIMATH_CLAMP(1.f - c.b, 0, 1),
+                    .r = g_op_transform_vtable[op->type](op, images, r),
+                    .g = g_op_transform_vtable[op->type](op, images, g),
+                    .b = g_op_transform_vtable[op->type](op, images, b),
                     .a = 1,
                 };
             }
@@ -317,90 +294,11 @@ static Image op_execute(const OperationContext* op)
                      GL_RGBA, GL_FLOAT, result.pixels);
         glBindTexture(GL_TEXTURE_2D, 0);
 
-        image_cleanup(&image);
-
-        return result;
-        break;
-    }
-    case OperationType_Log: {
-        Image image = image_load_from_ppm(op->image_filepaths[0]->abs_path_str);
-        Image result = {
-            .w = image.w,
-            .h = image.h,
-            .max_color = 255,
-        };
-        result.pixels = malloc(result.w * result.h * sizeof(*result.pixels));
-
-        for (int y = 0; y < result.h; y++)
-        {
-            for (int x = 0; x < result.w; x++)
-            {
-                FVec2 uv = {
-                    result.w <= 1 ? 0 : (float)x / (result.w - 1),
-                    result.h <= 1 ? 0 : (float)y / (result.h - 1),
-                };
-                Pixel c = image_sample_nearest(&image, uv);
-                result.pixels[y * result.w + x] = (Pixel){
-                    .r = op_transform_log(op, &image, c.r),
-                    .g = op_transform_log(op, &image, c.g),
-                    .b = op_transform_log(op, &image, c.b),
-                    .a = 1,
-                };
-            }
-        }
-
-        glGenTextures(1, &result.texture);
-        glBindTexture(GL_TEXTURE_2D, result.texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, result.w, result.h, 0,
-                     GL_RGBA, GL_FLOAT, result.pixels);
-        glBindTexture(GL_TEXTURE_2D, 0);
-
-        image_cleanup(&image);
-
-        return result;
-        break;
-    }
-    case OperationType_Power: {
-        Image image = image_load_from_ppm(op->image_filepaths[0]->abs_path_str);
-        Image result = {
-            .w = image.w,
-            .h = image.h,
-            .max_color = 255,
-        };
-        result.pixels = malloc(result.w * result.h * sizeof(*result.pixels));
-
-        for (int y = 0; y < result.h; y++)
-        {
-            for (int x = 0; x < result.w; x++)
-            {
-                FVec2 uv = {
-                    result.w <= 1 ? 0 : (float)x / (result.w - 1),
-                    result.h <= 1 ? 0 : (float)y / (result.h - 1),
-                };
-                Pixel c = image_sample_nearest(&image, uv);
-                result.pixels[y * result.w + x] = (Pixel){
-                    .r = op_transform_power(op, &image, c.r),
-                    .g = op_transform_power(op, &image, c.g),
-                    .b = op_transform_power(op, &image, c.b),
-                    .a = 1,
-                };
-            }
-        }
-
-        glGenTextures(1, &result.texture);
-        glBindTexture(GL_TEXTURE_2D, result.texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, result.w, result.h, 0,
-                     GL_RGBA, GL_FLOAT, result.pixels);
-        glBindTexture(GL_TEXTURE_2D, 0);
-
-        image_cleanup(&image);
-
-        return result;
-        break;
-    }
+        for (int i = 0; i < op->image_filepaths_count; i++)
+            image_cleanup(&images[i]);
     }
 
-    return (Image){0};
+    return result;
 }
 
 typedef struct ImageProcessing_
