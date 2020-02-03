@@ -21,6 +21,7 @@ typedef struct Image_
     uint texture;
 } Image;
 
+static void image_update_gl_texture(Image* image);
 static Image image_load_from_ppm(const char* filename)
 {
     Image result = {0};
@@ -65,16 +66,13 @@ static Image image_load_from_ppm(const char* filename)
 
         GLuint texture;
         glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, w, h, 0, GL_RGBA,
-                     GL_UNSIGNED_BYTE, pixels);
-        glBindTexture(GL_TEXTURE_2D, 0);
 
         result.w = w;
         result.h = h;
         result.max_color = max_color;
         result.pixels = pixels;
         result.texture = texture;
+        image_update_gl_texture(&result);
     }
 
     return result;
@@ -86,6 +84,14 @@ static void image_cleanup(Image* image)
         free(image->pixels);
     if (image->texture)
         glDeleteTextures(1, &image->texture);
+}
+
+static void image_update_gl_texture(Image* image)
+{
+    glBindTexture(GL_TEXTURE_2D, image->texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, image->w, image->h, 0, GL_RGBA,
+                 GL_FLOAT, image->pixels);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 static void image_write_to_file(Image* image)
@@ -289,10 +295,7 @@ static Image op_execute(const OperationContext* op)
         }
 
         glGenTextures(1, &result.texture);
-        glBindTexture(GL_TEXTURE_2D, result.texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, result.w, result.h, 0,
-                     GL_RGBA, GL_FLOAT, result.pixels);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        image_update_gl_texture(&result);
 
         for (int i = 0; i < op->image_filepaths_count; i++)
             image_cleanup(&images[i]);
@@ -311,6 +314,10 @@ typedef struct ImageProcessing_
     GLuint current_sampler;
 
     OperationContext op;
+
+    bool connectivity_flag[8];
+    IVec2 connectivity_direction[8];
+    float background_range;
 
     Path image_filepaths[100];
     int image_filepaths_count;
@@ -359,6 +366,15 @@ EXAMPLE_INIT_FN_SIG(image_processing)
     fs_for_each_files_with_ext(p, "ppm", &append_filepath, s);
     fs_path_cleanup(&p);
 
+    s->connectivity_direction[0] = (IVec2){-1, -1};
+    s->connectivity_direction[1] = (IVec2){0, -1};
+    s->connectivity_direction[2] = (IVec2){1, -1};
+    s->connectivity_direction[3] = (IVec2){-1, 0};
+    s->connectivity_direction[4] = (IVec2){1, 0};
+    s->connectivity_direction[5] = (IVec2){-1, 1};
+    s->connectivity_direction[6] = (IVec2){0, 1};
+    s->connectivity_direction[7] = (IVec2){1, 1};
+
     return e;
 }
 
@@ -385,6 +401,20 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
     igBegin("Control Panel", NULL,
             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                 ImGuiWindowFlags_AlwaysAutoResize);
+
+    if (igCollapsingHeader("I/O", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (s->result_image.pixels)
+        {
+            if (igButton("Save", (ImVec2){0}))
+                image_write_to_file(&s->result_image);
+        }
+        else
+        {
+            igText("Image not generated");
+        }
+    }
+
     if (igCollapsingHeader("Texture Sampling Method ",
                            ImGuiTreeNodeFlags_DefaultOpen))
     {
@@ -446,9 +476,9 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
                     }
                 }
                 break;
+            case OperationType_Negative:
             case OperationType_Log:
             case OperationType_Power:
-            case OperationType_Negative:
                 if (s->op.type == OperationType_Log)
                 {
                     igSliderFloat("Constant", &s->op.log_constant, 0, 200,
@@ -505,12 +535,219 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
         }
     }
 
-    if (igCollapsingHeader("I/O", ImGuiTreeNodeFlags_DefaultOpen))
+    if (igCollapsingHeader("CCL", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        if (s->result_image.pixels)
+        igTextColored((ImVec4){0, 1, 0, 1}, "Choose an Image");
+        if (s->op.image_filepaths_count == 1)
         {
-            if (igButton("Save", (ImVec2){0}))
-                image_write_to_file(&s->result_image);
+            for (int i = 0; i < s->op.image_filepaths_count; i++)
+            {
+                igSelectable(s->op.image_filepaths[i]->filename, true, 0,
+                             (ImVec2){0});
+            }
+            igTextColored((ImVec4){0, 1, 0, 1}, "Choose Connectivity");
+
+            if (igRadioButtonBool("##00", s->connectivity_flag[0]))
+                s->connectivity_flag[0] = !s->connectivity_flag[0];
+            igSameLine(0, 0);
+            if (igRadioButtonBool("##01", s->connectivity_flag[1]))
+                s->connectivity_flag[1] = !s->connectivity_flag[1];
+            igSameLine(0, 0);
+            if (igRadioButtonBool("##02", s->connectivity_flag[2]))
+                s->connectivity_flag[2] = !s->connectivity_flag[2];
+            if (igRadioButtonBool("##10", s->connectivity_flag[3]))
+                s->connectivity_flag[3] = !s->connectivity_flag[3];
+            igSameLine(0, 0);
+            igRadioButtonBool("##11", false);
+            igSameLine(0, 0);
+            if (igRadioButtonBool("##12", s->connectivity_flag[4]))
+                s->connectivity_flag[4] = !s->connectivity_flag[4];
+            if (igRadioButtonBool("##20", s->connectivity_flag[5]))
+                s->connectivity_flag[5] = !s->connectivity_flag[5];
+            igSameLine(0, 0);
+            if (igRadioButtonBool("##21", s->connectivity_flag[6]))
+                s->connectivity_flag[6] = !s->connectivity_flag[6];
+            igSameLine(0, 0);
+            if (igRadioButtonBool("##22", s->connectivity_flag[7]))
+                s->connectivity_flag[7] = !s->connectivity_flag[7];
+
+            igTextColored((ImVec4){0, 1, 0, 1},
+                          "Choose Background Color Range");
+            igSliderFloat("##BackgroudnRange", &s->background_range, 0, 1,
+                          "%.3f", 1);
+
+            igSeparator();
+            if (igButton("Execute", (ImVec2){0}))
+            {
+                image_cleanup(&s->result_image);
+
+                Image image =
+                    image_load_from_ppm(s->op.image_filepaths[0]->abs_path_str);
+
+                int* labels = calloc(image.w * image.h, sizeof(int));
+                int last_label = 0;
+
+                int* relations = calloc(image.w * image.h, sizeof(int));
+
+                for (int y = 0; y < image.h; y++)
+                {
+                    for (int x = 0; x < image.w; x++)
+                    {
+                        Pixel c = image.pixels[y * image.w + x];
+                        if (c.r > s->background_range)
+                        {
+                            int min_label = last_label + 1;
+
+                            for (int i = 0;
+                                 i < ARRAY_LENGTH(s->connectivity_direction);
+                                 i++)
+                            {
+                                if (!s->connectivity_flag[i] ||
+                                    s->connectivity_direction[i].x > 0 ||
+                                    s->connectivity_direction[i].y > 0)
+                                {
+                                    continue;
+                                }
+
+                                int nx = x + s->connectivity_direction[i].x;
+                                int ny = y + s->connectivity_direction[i].y;
+
+                                if (nx >= 0 && nx < image.w && ny >= 0 &&
+                                    ny < image.h)
+                                {
+                                    int nlabel = labels[ny * image.w + nx];
+                                    if (nlabel > 0)
+                                    {
+#if 0
+                                        if (min_label == last_label + 1 ||
+                                            nlabel > min_label)
+                                        {
+                                            relations[y * image.w + x] =
+                                                relations[y * image.w + x] ==
+                                                        0 ?
+                                                    nlabel :
+                                                    HIMATH_MIN(
+                                                        relations[y * image.w +
+                                                                  x],
+                                                        nlabel);
+                                        }
+#endif
+                                        min_label =
+                                            HIMATH_MIN(min_label, nlabel);
+                                    }
+                                }
+                            }
+
+                            if (min_label == last_label + 1)
+                            {
+                                ++last_label;
+                                labels[y * image.w + x] = last_label;
+                            }
+                            else
+                            {
+                                labels[y * image.w + x] = min_label;
+                            }
+                        }
+                    }
+                }
+
+                for (int y = 0; y < image.h; y++)
+                {
+                    for (int x = 0; x < image.w; x++)
+                    {
+                        int min_label = labels[y * image.w + x];
+
+                        for (int i = 0;
+                             i < ARRAY_LENGTH(s->connectivity_direction); i++)
+                        {
+                            if (!s->connectivity_flag[i])
+                            {
+                                continue;
+                            }
+
+                            int nx = x + s->connectivity_direction[i].x;
+                            int ny = y + s->connectivity_direction[i].y;
+
+                            if (nx >= 0 && nx < image.w && ny >= 0 &&
+                                ny < image.h)
+                            {
+                                int nlabel = labels[ny * image.w + nx];
+                                if (nlabel > 0)
+                                    min_label = HIMATH_MIN(nlabel, min_label);
+                            }
+                        }
+
+                        int* r = &relations[labels[y * image.w + x]];
+                        if (*r == 0)
+                        {
+                            *r = min_label;
+                        }
+                        else
+                        {
+                            *r = HIMATH_MIN(*r, min_label);
+                        }
+                    }
+                }
+
+                for (int i = 0; i <= last_label; i++)
+                {
+                    while (relations[i] != relations[relations[i]])
+                    {
+                        relations[i] =
+                            HIMATH_MIN(relations[i], relations[relations[i]]);
+                    }
+                }
+
+                for (int y = 0; y < image.h; y++)
+                {
+                    for (int x = 0; x < image.w; x++)
+                    {
+                        if (labels[y * image.w + x] > 0)
+                        {
+                            labels[y * image.w + x] =
+                                relations[labels[y * image.w + x]];
+                        }
+                    }
+                }
+
+                for (int y = 0; y < image.h; y++)
+                {
+                    for (int x = 0; x < image.w; x++)
+                    {
+                        image.pixels[y * image.w + x].r =
+                            (float)labels[y * image.w + x] * 0.1f;
+                        image.pixels[y * image.w + x].g =
+                            (float)labels[y * image.w + x] * 0.1f;
+                        image.pixels[y * image.w + x].b =
+                            (float)labels[y * image.w + x] * 0.1f;
+                    }
+                }
+
+                image_update_gl_texture(&image);
+                glBindTexture(GL_TEXTURE_2D, image.texture);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, image.w, image.h, 0,
+                             GL_RGBA, GL_FLOAT, image.pixels);
+                glBindTexture(GL_TEXTURE_2D, 0);
+
+                free(relations);
+                free(labels);
+
+                s->result_image = image;
+                s->op = (OperationContext){0};
+            }
+        }
+        else
+        {
+            for (int i = 0; i < s->image_filepaths_count; i++)
+            {
+                if (igSelectable(
+                        s->image_filepaths[i].filename,
+                        op_is_image_selected(&s->op, &s->image_filepaths[i]), 0,
+                        (ImVec2){0}))
+                {
+                    op_push_image_path(&s->op, &s->image_filepaths[i]);
+                }
+            }
         }
     }
 
