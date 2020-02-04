@@ -709,17 +709,80 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
                         }
                     }
                 }
+                for (int y = 0; y < image.h; y++)
+                {
+                    for (int x = 0; x < image.w; x++)
+                    {
+                        int min_label = labels[y * image.w + x];
+
+                        for (int i = 0;
+                             i < ARRAY_LENGTH(s->connectivity_direction); i++)
+                        {
+                            if (!s->connectivity_flag[i])
+                            {
+                                continue;
+                            }
+
+                            int nx = x + s->connectivity_direction[i].x;
+                            int ny = y + s->connectivity_direction[i].y;
+
+                            if (nx >= 0 && nx < image.w && ny >= 0 &&
+                                ny < image.h)
+                            {
+                                int nlabel = labels[ny * image.w + nx];
+                                if (nlabel > 0)
+                                    min_label = HIMATH_MIN(nlabel, min_label);
+                            }
+                        }
+
+                        int* r = &relations[labels[y * image.w + x]];
+                        if (*r == 0)
+                        {
+                            *r = min_label;
+                        }
+                        else
+                        {
+                            *r = HIMATH_MIN(*r, min_label);
+                        }
+                    }
+                }
+
+                for (int i = 0; i <= last_label; i++)
+                {
+                    while (relations[i] != relations[relations[i]])
+                    {
+                        relations[i] =
+                            HIMATH_MIN(relations[i], relations[relations[i]]);
+                    }
+                }
 
                 for (int y = 0; y < image.h; y++)
                 {
                     for (int x = 0; x < image.w; x++)
                     {
-                        image.pixels[y * image.w + x].r =
-                            (float)labels[y * image.w + x] * 0.1f;
-                        image.pixels[y * image.w + x].g =
-                            (float)labels[y * image.w + x] * 0.1f;
-                        image.pixels[y * image.w + x].b =
-                            (float)labels[y * image.w + x] * 0.1f;
+                        if (labels[y * image.w + x] > 0)
+                        {
+                            labels[y * image.w + x] =
+                                relations[labels[y * image.w + x]];
+                        }
+                    }
+                }
+
+                for (int y = 0; y < image.h; y++)
+                {
+                    for (int x = 0; x < image.w; x++)
+                    {
+                        float label = (float)labels[y * image.w + x];
+                        if (label == 0)
+                        {
+                            image.pixels[y * image.w + x] = (Pixel){0};
+                        }
+                        else
+                        {
+                            image.pixels[y * image.w + x].r = label * 0.5f;
+                            image.pixels[y * image.w + x].g = label * 0.5f;
+                            image.pixels[y * image.w + x].b = label * 0.5f;
+                        }
                     }
                 }
 
