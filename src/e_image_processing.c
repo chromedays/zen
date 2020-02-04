@@ -22,6 +22,20 @@ typedef struct Image_
 } Image;
 
 static void image_update_gl_texture(Image* image);
+
+static void image_init(Image* image, int w, int h, int max_color)
+{
+    *image = (Image){
+        .w = w,
+        .h = h,
+        .max_color = max_color,
+    };
+    image->pixels = calloc(w * h, sizeof(*image->pixels));
+
+    glGenTextures(1, &image->texture);
+    image_update_gl_texture(image);
+}
+
 static Image image_load_from_ppm(const char* filename)
 {
     Image result = {0};
@@ -84,6 +98,14 @@ static void image_cleanup(Image* image)
         free(image->pixels);
     if (image->texture)
         glDeleteTextures(1, &image->texture);
+
+    *image = (Image){0};
+}
+
+static bool image_is_valid(const Image* image)
+{
+    bool result = (image->w > 0) && (image->h > 0) && (image->pixels);
+    return result;
 }
 
 static void image_update_gl_texture(Image* image)
@@ -96,7 +118,7 @@ static void image_update_gl_texture(Image* image)
 
 static void image_write_to_file(Image* image)
 {
-    if (!image->pixels)
+    if (!image_is_valid(image))
         return;
 
     Path output_path = fs_path_make_working_dir();
@@ -119,6 +141,39 @@ static void image_write_to_file(Image* image)
     fs_path_cleanup(&output_path);
 }
 
+static Pixel* image_get_pixel_ref(const Image* image, IVec2 tex_coords)
+{
+    ASSERT(tex_coords.x >= 0 && tex_coords.x < image->w && tex_coords.y >= 0 &&
+           tex_coords.y < image->h);
+
+    Pixel* result = &image->pixels[image->w * tex_coords.y + tex_coords.x];
+    return result;
+}
+
+static Pixel image_get_pixel_val(const Image* image, IVec2 tex_coords)
+{
+    Pixel result = *image_get_pixel_ref(image, tex_coords);
+    return result;
+}
+
+static void image_set_pixel(const Image* image, IVec2 tex_coords, Pixel value)
+{
+    Pixel* ref = image_get_pixel_ref(image, tex_coords);
+    *ref = value;
+}
+
+static void
+    image_set_pixels_and_update_texture(Image* image, Pixel* pixels, IVec2 size)
+{
+    if (image->pixels)
+        free(image->pixels);
+    image->pixels = pixels;
+    image->w = size.x;
+    image->h = size.y;
+
+    image_update_gl_texture(image);
+}
+
 static Pixel image_sample_nearest(const Image* image, FVec2 fuv)
 {
     IVec2 uv = {
@@ -126,9 +181,8 @@ static Pixel image_sample_nearest(const Image* image, FVec2 fuv)
         (int)roundf(fuv.y * (float)(image->h - 1)),
     };
 
-    ASSERT(uv.x >= 0 && uv.x < image->w && uv.y >= 0 && uv.y < image->h);
-
-    return image->pixels[image->w * uv.y + uv.x];
+    Pixel result = image_get_pixel_val(image, uv);
+    return result;
 }
 
 typedef enum OperationType_
@@ -247,23 +301,24 @@ static void op_push_image_path(OperationContext* op, const Path* image_filepath)
 
 static Image op_execute(const OperationContext* op)
 {
-    Image result = {
-        .max_color = 255,
-    };
+    Image result = {0};
+
+    int max_color = 255;
 
     if (op->image_filepaths_count > 0)
     {
         Image images[ARRAY_LENGTH(op->image_filepaths)] = {0};
+        IVec2 result_image_size = {0};
         for (int i = 0; i < op->image_filepaths_count; i++)
         {
             images[i] =
                 image_load_from_ppm(op->image_filepaths[i]->abs_path_str);
-            result.w = HIMATH_MAX(result.w, images[i].w);
-            result.h = HIMATH_MAX(result.h, images[i].h);
+            result_image_size.x = HIMATH_MAX(result_image_size.x, images[i].w);
+            result_image_size.y = HIMATH_MAX(result_image_size.y, images[i].h);
         }
 
-        result.pixels =
-            (Pixel*)malloc(result.w * result.h * sizeof(*result.pixels));
+        image_init(&result, result_image_size.x, result_image_size.y,
+                   max_color);
 
         for (int y = 0; y < result.h; y++)
         {
@@ -285,16 +340,17 @@ static Image op_execute(const OperationContext* op)
                     b[i] = c.b;
                 }
 
-                result.pixels[y * result.w + x] = (Pixel){
-                    .r = g_op_transform_vtable[op->type](op, images, r),
-                    .g = g_op_transform_vtable[op->type](op, images, g),
-                    .b = g_op_transform_vtable[op->type](op, images, b),
-                    .a = 1,
-                };
+                image_set_pixel(
+                    &result, (IVec2){x, y},
+                    (Pixel){
+                        .r = g_op_transform_vtable[op->type](op, images, r),
+                        .g = g_op_transform_vtable[op->type](op, images, g),
+                        .b = g_op_transform_vtable[op->type](op, images, b),
+                        .a = 1,
+                    });
             }
         }
 
-        glGenTextures(1, &result.texture);
         image_update_gl_texture(&result);
 
         for (int i = 0; i < op->image_filepaths_count; i++)
@@ -404,7 +460,7 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
 
     if (igCollapsingHeader("I/O", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        if (s->result_image.pixels)
+        if (image_is_valid(&s->result_image))
         {
             if (igButton("Save", (ImVec2){0}))
                 image_write_to_file(&s->result_image);
@@ -593,7 +649,7 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
                 {
                     for (int x = 0; x < image.w; x++)
                     {
-                        Pixel c = image.pixels[y * image.w + x];
+                        Pixel c = image_get_pixel_val(&image, (IVec2){x, y});
                         if (c.r > s->background_range)
                         {
                             int min_label = last_label + 1;
@@ -775,22 +831,22 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
                         float label = (float)labels[y * image.w + x];
                         if (label == 0)
                         {
-                            image.pixels[y * image.w + x] = (Pixel){0};
+                            image_set_pixel(&image, (IVec2){x, y}, (Pixel){0});
                         }
                         else
                         {
-                            image.pixels[y * image.w + x].r = label * 0.5f;
-                            image.pixels[y * image.w + x].g = label * 0.5f;
-                            image.pixels[y * image.w + x].b = label * 0.5f;
+                            image_set_pixel(&image, (IVec2){x, y},
+                                            (Pixel){
+                                                .r = label * 0.5f,
+                                                .g = label * 0.5f,
+                                                .b = label * 0.5f,
+                                                .a = 1,
+                                            });
                         }
                     }
                 }
 
                 image_update_gl_texture(&image);
-                glBindTexture(GL_TEXTURE_2D, image.texture);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, image.w, image.h, 0,
-                             GL_RGBA, GL_FLOAT, image.pixels);
-                glBindTexture(GL_TEXTURE_2D, 0);
 
                 free(relations);
                 free(labels);
