@@ -250,6 +250,20 @@ typedef struct ImageOperationArgs_
     };
 } ImageOperationArgs;
 
+void image_operation_args_cleanup(ImageOperationArgs* args)
+{
+    switch (args->type)
+    {
+    case ImageOperationType_Addition:
+    case ImageOperationType_Subtraction:
+    case ImageOperationType_Product:
+        if (image_is_valid(&args->add_sub_prod.other))
+            image_cleanup(&args->add_sub_prod.other);
+        break;
+    }
+    *args = (ImageOperationArgs){0};
+}
+
 #define IMAGE_OPERATION_FN_DECL(name)                                          \
     Image name(Image* image, const ImageOperationArgs* args)
 typedef IMAGE_OPERATION_FN_DECL(ImageOperationFn);
@@ -303,6 +317,7 @@ IMAGE_OPERATION_FN_DECL(image_operation_binary)
                     .b = c0.b * c1.b,
                     .a = 1,
                 };
+                break;
             default: ASSERT(false);
             }
             image_set_pixel(&result, (IVec2){x, y}, result_c);
@@ -397,15 +412,20 @@ IMAGE_OPERATION_FN_DECL(image_operation_ccl)
     return result;
 }
 
-ImageOperationFn* g_image_operation_vtable[ImageOperationType_Count] = {
-    NULL,
-    &image_operation_binary,
-    &image_operation_binary,
-    &image_operation_binary,
-    &image_operation_unary,
-    &image_operation_unary,
-    &image_operation_unary,
-    &image_operation_ccl,
+typedef struct ImageOperationMeta_
+{
+    const char* name;
+    ImageOperationFn* func;
+} ImageOperationMeta;
+ImageOperationMeta g_image_operation_meta[ImageOperationType_Count] = {
+    {0},
+    {"Addition", &image_operation_binary},
+    {"Subtraction", &image_operation_binary},
+    {"Product", &image_operation_binary},
+    {"Negative", &image_operation_unary},
+    {"Log", &image_operation_unary},
+    {"Power", &image_operation_unary},
+    {"CCL", &image_operation_ccl},
 };
 
 typedef struct ImageProcessing_
@@ -424,16 +444,8 @@ typedef struct ImageProcessing_
     Image current_image;
 
     // Args
-    Image other_image;
-
-    float log_constant;
-    float log_base;
-
-    float power_constant;
-    float power_gamma;
-
-    uint8_t connectivity_bits;
-    float background_label_max_intensity;
+    ImageOperationArgs args;
+    int other_image_filepath_index;
 } ImageProcessing;
 
 static FILE_FOREACH_FN_DECL(append_filepath)
@@ -478,6 +490,7 @@ EXAMPLE_INIT_FN_SIG(image_processing)
     fs_path_cleanup(&p);
 
     s->current_image_filepath_index = -1;
+    s->other_image_filepath_index = -1;
 
     return e;
 }
@@ -486,8 +499,7 @@ EXAMPLE_CLEANUP_FN_SIG(image_processing)
 {
     Example* e = (Example*)udata;
     ImageProcessing* s = (ImageProcessing*)e->scene;
-    if (image_is_valid(&s->other_image))
-        image_cleanup(&s->other_image);
+    image_operation_args_cleanup(&s->args);
     if (image_is_valid(&s->current_image))
         image_cleanup(&s->current_image);
     for (int i = 0; i < s->image_filepaths_count; i++)
@@ -499,24 +511,37 @@ EXAMPLE_CLEANUP_FN_SIG(image_processing)
     e_example_destroy(e);
 }
 
+static void reset_ui_state(ImageProcessing* s)
+{
+    image_operation_args_cleanup(&s->args);
+    if (image_is_valid(&s->current_image))
+        image_cleanup(&s->current_image);
+    s->current_image_filepath_index = -1;
+    s->other_image_filepath_index = -1;
+}
+
 EXAMPLE_UPDATE_FN_SIG(image_processing)
 {
     Example* e = (Example*)udata;
     ImageProcessing* s = (ImageProcessing*)e->scene;
 
     igSetNextWindowPos((ImVec2){0, 0}, ImGuiCond_Once, (ImVec2){0, 0});
-    igBegin("Menus", NULL,
-            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                ImGuiWindowFlags_AlwaysAutoResize);
+    igSetNextWindowSize((ImVec2){300, 0}, ImGuiCond_Once);
+    igBegin("Menus", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
     if (igButton("Reset", (ImVec2){0}))
+        reset_ui_state(s);
+
+    if (image_is_valid(&s->current_image))
     {
-        if (image_is_valid(&s->current_image))
-            image_cleanup(&s->current_image);
+        igSameLine(0, -1);
+        if (igButton("Save", (ImVec2){0}))
+            image_write_to_file(&s->current_image);
     }
     igSeparator();
 
-    if (!image_is_valid(&s->current_image))
+    if (!image_is_valid(&s->current_image) ||
+        (s->current_image_filepath_index < 0))
     {
         igText("Select Target Image");
         igSeparator();
@@ -537,6 +562,89 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
         igSelectable(
             s->image_filepaths[s->current_image_filepath_index].filename, true,
             ImGuiSelectableFlags_None, (ImVec2){0});
+        igSeparator();
+
+        if (s->args.type == ImageOperationType_Undefined)
+        {
+            igText("Select Operation");
+            igSeparator();
+            for (int i = 1; i < ImageOperationType_Count; i++)
+            {
+                if (igSelectable(g_image_operation_meta[i].name,
+                                 s->args.type == i, ImGuiSelectableFlags_None,
+                                 (ImVec2){0}))
+                {
+                    s->args.type = i;
+                }
+            }
+        }
+        else
+        {
+            igSelectable(g_image_operation_meta[s->args.type].name, true,
+                         ImGuiSelectableFlags_None, (ImVec2){0});
+            igSeparator();
+
+            bool is_args_complete = false;
+
+            switch (s->args.type)
+            {
+            case ImageOperationType_Addition:
+            case ImageOperationType_Subtraction:
+            case ImageOperationType_Product: {
+                if (image_is_valid(&s->args.add_sub_prod.other) &&
+                    (s->other_image_filepath_index >= 0))
+                    is_args_complete = true;
+                break;
+            }
+            }
+
+            switch (s->args.type)
+            {
+            case ImageOperationType_Addition:
+            case ImageOperationType_Subtraction:
+            case ImageOperationType_Product: {
+                igPushIDInt(99);
+                if (!is_args_complete)
+                {
+                    igText("Select Other Image");
+                    igSeparator();
+                    for (int i = 0; i < s->image_filepaths_count; i++)
+                    {
+                        if (igSelectable(s->image_filepaths[i].filename,
+                                         s->other_image_filepath_index == i,
+                                         ImGuiSelectableFlags_None,
+                                         (ImVec2){0}))
+                        {
+                            s->args.add_sub_prod.other = image_load_from_ppm(
+                                s->image_filepaths[i].abs_path_str);
+                            s->other_image_filepath_index = i;
+                        }
+                    }
+                }
+                else
+                {
+                    igSelectable(
+                        s->image_filepaths[s->other_image_filepath_index]
+                            .filename,
+                        true, ImGuiSelectableFlags_None, (ImVec2){0});
+                }
+                igPopID();
+                break;
+            }
+            }
+
+            if (is_args_complete)
+            {
+                if (igButton("Execute", (ImVec2){0}))
+                {
+                    Image result_image =
+                        g_image_operation_meta[s->args.type].func(
+                            &s->current_image, &s->args);
+                    reset_ui_state(s);
+                    s->current_image = result_image;
+                }
+            }
+        }
     }
 
 #if 0
