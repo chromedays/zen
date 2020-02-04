@@ -526,122 +526,162 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
     ImageProcessing* s = (ImageProcessing*)e->scene;
 
     igSetNextWindowPos((ImVec2){0, 0}, ImGuiCond_Once, (ImVec2){0, 0});
-    igSetNextWindowSize((ImVec2){300, 0}, ImGuiCond_Once);
+    igSetNextWindowSize((ImVec2){300, (float)input->window_size.y},
+                        ImGuiCond_Once);
     igBegin("Menus", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
-    if (igButton("Reset", (ImVec2){0}))
-        reset_ui_state(s);
-
-    if (image_is_valid(&s->current_image))
+    if (igCollapsingHeader("Texture Sampling Method ",
+                           ImGuiTreeNodeFlags_DefaultOpen))
     {
-        igSameLine(0, -1);
-        if (igButton("Save", (ImVec2){0}))
-            image_write_to_file(&s->current_image);
-    }
-    igSeparator();
-
-    if (!image_is_valid(&s->current_image) ||
-        (s->current_image_filepath_index < 0))
-    {
-        igText("Select Target Image");
-        igSeparator();
-        for (int i = 0; i < s->image_filepaths_count; i++)
+        if (igRadioButtonBool("Nearest",
+                              s->current_sampler == s->sampler_nearest))
         {
-            if (igSelectable(s->image_filepaths[i].filename,
-                             s->current_image_filepath_index == i,
-                             ImGuiSelectableFlags_None, (ImVec2){0}))
-            {
-                s->current_image =
-                    image_load_from_ppm(s->image_filepaths[i].abs_path_str);
-                s->current_image_filepath_index = i;
-            }
+            s->current_sampler = s->sampler_nearest;
+        }
+        igSameLine(0, -1);
+        if (igRadioButtonBool("Bilinear",
+                              s->current_sampler == s->sampler_bilinear))
+        {
+            s->current_sampler = s->sampler_bilinear;
         }
     }
-    else
+
+    if (igCollapsingHeader("Operation", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        igSelectable(
-            s->image_filepaths[s->current_image_filepath_index].filename, true,
-            ImGuiSelectableFlags_None, (ImVec2){0});
+        if (igButton("Reset", (ImVec2){0}))
+            reset_ui_state(s);
+
+        if (image_is_valid(&s->current_image))
+        {
+            igSameLine(0, -1);
+            if (igButton("Save", (ImVec2){0}))
+                image_write_to_file(&s->current_image);
+        }
         igSeparator();
 
-        if (s->args.type == ImageOperationType_Undefined)
+        if (!image_is_valid(&s->current_image) ||
+            (s->current_image_filepath_index < 0))
         {
-            igText("Select Operation");
+            igText("Select Target Image");
             igSeparator();
-            for (int i = 1; i < ImageOperationType_Count; i++)
+            for (int i = 0; i < s->image_filepaths_count; i++)
             {
-                if (igSelectable(g_image_operation_meta[i].name,
-                                 s->args.type == i, ImGuiSelectableFlags_None,
-                                 (ImVec2){0}))
+                if (igSelectable(s->image_filepaths[i].filename,
+                                 s->current_image_filepath_index == i,
+                                 ImGuiSelectableFlags_None, (ImVec2){0}))
                 {
-                    s->args.type = i;
+                    s->current_image =
+                        image_load_from_ppm(s->image_filepaths[i].abs_path_str);
+                    s->current_image_filepath_index = i;
                 }
             }
         }
         else
         {
-            igSelectable(g_image_operation_meta[s->args.type].name, true,
-                         ImGuiSelectableFlags_None, (ImVec2){0});
+            igSelectable(
+                s->image_filepaths[s->current_image_filepath_index].filename,
+                true, ImGuiSelectableFlags_None, (ImVec2){0});
             igSeparator();
 
-            bool is_args_complete = false;
-
-            switch (s->args.type)
+            if (s->args.type == ImageOperationType_Undefined)
             {
-            case ImageOperationType_Addition:
-            case ImageOperationType_Subtraction:
-            case ImageOperationType_Product: {
-                if (image_is_valid(&s->args.add_sub_prod.other) &&
-                    (s->other_image_filepath_index >= 0))
-                    is_args_complete = true;
-                break;
-            }
-            }
-
-            switch (s->args.type)
-            {
-            case ImageOperationType_Addition:
-            case ImageOperationType_Subtraction:
-            case ImageOperationType_Product: {
-                igPushIDInt(99);
-                if (!is_args_complete)
+                igText("Select Operation");
+                igSeparator();
+                for (int i = 1; i < ImageOperationType_Count; i++)
                 {
-                    igText("Select Other Image");
-                    igSeparator();
-                    for (int i = 0; i < s->image_filepaths_count; i++)
+                    if (igSelectable(g_image_operation_meta[i].name,
+                                     s->args.type == i,
+                                     ImGuiSelectableFlags_None, (ImVec2){0}))
                     {
-                        if (igSelectable(s->image_filepaths[i].filename,
-                                         s->other_image_filepath_index == i,
-                                         ImGuiSelectableFlags_None,
-                                         (ImVec2){0}))
-                        {
-                            s->args.add_sub_prod.other = image_load_from_ppm(
-                                s->image_filepaths[i].abs_path_str);
-                            s->other_image_filepath_index = i;
-                        }
+                        s->args.type = i;
                     }
                 }
-                else
-                {
-                    igSelectable(
-                        s->image_filepaths[s->other_image_filepath_index]
-                            .filename,
-                        true, ImGuiSelectableFlags_None, (ImVec2){0});
-                }
-                igPopID();
-                break;
             }
-            }
-
-            if (is_args_complete)
+            else
             {
-                if (igButton("Execute", (ImVec2){0}))
+                igSelectable(g_image_operation_meta[s->args.type].name, true,
+                             ImGuiSelectableFlags_None, (ImVec2){0});
+                igSeparator();
+
+                bool is_args_complete = false;
+
+                switch (s->args.type)
                 {
-                    Image result_image =
-                        g_image_operation_meta[s->args.type].func(
-                            &s->current_image, &s->args);
-                    reset_ui_state(s);
-                    s->current_image = result_image;
+                case ImageOperationType_Addition:
+                case ImageOperationType_Subtraction:
+                case ImageOperationType_Product: {
+                    if (image_is_valid(&s->args.add_sub_prod.other) &&
+                        (s->other_image_filepath_index >= 0))
+                        is_args_complete = true;
+                    break;
+                case ImageOperationType_Negative:
+                case ImageOperationType_Log:
+                case ImageOperationType_Power: {
+                    is_args_complete = true;
+                    break;
+                }
+                }
+                }
+
+                switch (s->args.type)
+                {
+                case ImageOperationType_Addition:
+                case ImageOperationType_Subtraction:
+                case ImageOperationType_Product: {
+                    igPushIDInt(99);
+                    if (!is_args_complete)
+                    {
+                        igText("Select Other Image");
+                        igSeparator();
+                        for (int i = 0; i < s->image_filepaths_count; i++)
+                        {
+                            if (igSelectable(s->image_filepaths[i].filename,
+                                             s->other_image_filepath_index == i,
+                                             ImGuiSelectableFlags_None,
+                                             (ImVec2){0}))
+                            {
+                                s->args.add_sub_prod.other =
+                                    image_load_from_ppm(
+                                        s->image_filepaths[i].abs_path_str);
+                                s->other_image_filepath_index = i;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        igSelectable(
+                            s->image_filepaths[s->other_image_filepath_index]
+                                .filename,
+                            true, ImGuiSelectableFlags_None, (ImVec2){0});
+                    }
+                    igPopID();
+                    break;
+                case ImageOperationType_Log: {
+                    igSliderFloat("Constant", &s->args.log.constant, 0, 200,
+                                  "%.3f", 1);
+                    igSliderFloat("Base", &s->args.log.base, 2, 10, "%.3f", 1);
+                    break;
+                }
+                case ImageOperationType_Power: {
+                    igSliderFloat("Constant", &s->args.power.constant, 0, 5,
+                                  "%.3f", 1);
+                    igSliderFloat("Gamma", &s->args.power.gamma, 0, 10, "%.3f",
+                                  1);
+                    break;
+                }
+                }
+                }
+
+                if (is_args_complete)
+                {
+                    if (igButton("Execute", (ImVec2){0}))
+                    {
+                        Image result_image =
+                            g_image_operation_meta[s->args.type].func(
+                                &s->current_image, &s->args);
+                        reset_ui_state(s);
+                        s->current_image = result_image;
+                    }
                 }
             }
         }
@@ -661,21 +701,6 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
         }
     }
 
-    if (igCollapsingHeader("Texture Sampling Method ",
-                           ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        if (igRadioButtonBool("Nearest",
-                              s->current_sampler == s->sampler_nearest))
-        {
-            s->current_sampler = s->sampler_nearest;
-        }
-        igSameLine(0, -1);
-        if (igRadioButtonBool("Bilinear",
-                              s->current_sampler == s->sampler_bilinear))
-        {
-            s->current_sampler = s->sampler_bilinear;
-        }
-    }
 
     if (igCollapsingHeader("Operations", ImGuiTreeNodeFlags_DefaultOpen))
     {
