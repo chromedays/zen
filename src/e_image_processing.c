@@ -405,10 +405,138 @@ IMAGE_OPERATION_FN_DECL(image_operation_unary)
     return result;
 }
 
+static int disjoint_sets_find(int* parents, int label)
+{
+    while (parents[label] != 0)
+        label = parents[label];
+
+    return label;
+}
+
+static void
+    disjoint_sets_union(int* parents, int* ranks, int root_a, int root_b)
+{
+    if (root_a == root_b)
+        return;
+
+    int parent;
+    int child;
+    if (ranks[root_a] > ranks[root_b])
+    {
+        parent = root_a;
+        child = root_b;
+    }
+    else
+    {
+        parent = root_b;
+        child = root_a;
+    }
+
+    parents[child] = parent;
+    ranks[child] = 0;
+    ++ranks[parent];
+}
+
 IMAGE_OPERATION_FN_DECL(image_operation_ccl)
 {
     Image result = {0};
-    ASSERT(false);
+
+    int* parents = (int*)calloc(image->w * image->h, sizeof(*parents));
+    int* ranks = (int*)calloc(image->w * image->h, sizeof(*ranks));
+    int* labels = (int*)calloc(image->w * image->h, sizeof(*labels));
+
+    int current_label = 1;
+
+    for (int i = 0; i < image->w * image->h; i++)
+    {
+        int x = i % image->w;
+        int y = i / image->w;
+
+        if (image->pixels[i].r > args->ccl.background_max_intensity)
+        {
+            int label = current_label;
+            int neighbor_labels[9] = {0};
+            int neighbor_labels_count = 0;
+            for (int j = 0; j < 9; j++)
+            {
+                if (args->ccl.neighbor_bits & (1 << j))
+                {
+                    int dx = (j % 3) - 1;
+                    int dy = (j / 3) - 1;
+                    int neighbor = (y + dy) * image->w + (x + dx);
+                    if ((neighbor < i) && (neighbor >= 0) &&
+                        (neighbor < (image->w * image->h)) &&
+                        (labels[neighbor] > 0))
+                    {
+                        bool should_push_neighbor_label = true;
+                        for (int k = 0; k < neighbor_labels_count; k++)
+                        {
+                            if (neighbor_labels[k] == labels[neighbor])
+                            {
+                                should_push_neighbor_label = false;
+                                break;
+                            }
+                        }
+
+                        if (should_push_neighbor_label)
+                        {
+                            neighbor_labels[neighbor_labels_count++] =
+                                labels[neighbor];
+                        }
+
+                        label = HIMATH_MIN(label, labels[neighbor]);
+                    }
+                }
+            }
+
+            int root = disjoint_sets_find(parents, label);
+
+            for (int j = 0; j < neighbor_labels_count; j++)
+            {
+                int neighbor_root =
+                    disjoint_sets_find(parents, neighbor_labels[j]);
+                if (root != neighbor_root)
+                    disjoint_sets_union(parents, ranks, root, neighbor_root);
+            }
+
+            labels[i] = label;
+            if (label == current_label)
+                ++current_label;
+        }
+    }
+
+    for (int i = 0; i < image->w * image->h; i++)
+    {
+        labels[i] = disjoint_sets_find(parents, labels[i]);
+    }
+
+    Pixel* label_colors =
+        (Pixel*)calloc(image->w * image->h, sizeof(*label_colors));
+
+    image_init(&result, image->w, image->h, 255);
+    for (int i = 0; i < result.w * result.h; i++)
+    {
+        Pixel* label_color = &label_colors[labels[i]];
+        if ((label_color->r == 0) && (label_color->g == 0) &&
+            (label_color->b == 0) && (label_color->a == 0))
+        {
+            *label_color = (Pixel){
+                .r = (float)(rand() % 255) / 255.f,
+                .g = (float)(rand() % 255) / 255.f,
+                .b = (float)(rand() % 255) / 255.f,
+                .a = 1,
+            };
+        }
+
+        result.pixels[i] = *label_color;
+    }
+    image_update_gl_texture(&result);
+
+    free(label_colors);
+    free(labels);
+    free(ranks);
+    free(parents);
+
     return result;
 }
 
