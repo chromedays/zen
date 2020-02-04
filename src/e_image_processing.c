@@ -173,35 +173,6 @@ static Pixel image_sample_nearest(const Image* image, FVec2 fuv)
     return result;
 }
 
-#if 0
-typedef enum ImageOperationType_
-{
-    ImageOperationType_Undefined,
-    ImageOperationType_UnaryTransform,
-    ImageOperationType_BinaryTransform,
-    ImageOperationType_ConnectedComponentLabeling,
-    ImageOperationType_Count,
-} ImageOperationType;
-
-typedef enum ImageUnaryTransformType_
-{
-    ImageUnaryTransformType_Undefined,
-    ImageUnaryTransformType_Addition,
-    ImageUnaryTransformType_Subtraction,
-    ImageUnaryTransformType_Product,
-    ImageUnaryTransformType_Count,
-} ImageUnaryTransformType;
-
-typedef enum ImageBinaryTransformType_
-{
-    ImageBinaryTransformType_Undefined,
-    ImageBinaryTransformType_Negative,
-    ImageBinaryTransformType_Log,
-    ImageBinaryTransformType_Power,
-    ImageBinaryTransformType_Count,
-} ImageBinaryTransformType_;
-#endif
-
 typedef enum ImageOperationType_
 {
     ImageOperationType_Undefined,
