@@ -244,7 +244,7 @@ typedef struct ImageOperationArgs_
 
         struct
         {
-            uint8_t neighbor_bits;
+            uint16_t neighbor_bits;
             float background_max_intensity;
         } ccl;
     };
@@ -616,7 +616,8 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
                     break;
                 case ImageOperationType_Negative:
                 case ImageOperationType_Log:
-                case ImageOperationType_Power: {
+                case ImageOperationType_Power:
+                case ImageOperationType_CCL: {
                     is_args_complete = true;
                     break;
                 }
@@ -667,6 +668,43 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
                                   "%.3f", 1);
                     igSliderFloat("Gamma", &s->args.power.gamma, 0, 10, "%.3f",
                                   1);
+                    break;
+                }
+                case ImageOperationType_CCL: {
+                    igText("Select Connected Neighbors");
+                    igSeparator();
+                    for (int i = 0; i < 9; i++)
+                    {
+                        int x = i % 3;
+                        int y = i / 3;
+
+                        bool enabled = false;
+
+                        if ((x == 1) && (y == 1))
+                        {
+                            enabled = true;
+                        }
+                        else
+                        {
+                            enabled = (s->args.ccl.neighbor_bits & (1 << i));
+                        }
+
+                        char id[6] = {0};
+                        sprintf_s(id, ARRAY_LENGTH(id), "##%d%d", y, x);
+
+                        if (igRadioButtonBool(id, enabled))
+                        {
+                            s->args.ccl.neighbor_bits ^= (1 << i);
+                        }
+                        if (x < 2)
+                            igSameLine(0, -1);
+                    }
+
+                    igText("Background Max Intensity");
+                    igSliderFloat("##Background Max Intensity",
+                                  &s->args.ccl.background_max_intensity, 0, 1,
+                                  "%.3f", 1);
+
                     break;
                 }
                 }
