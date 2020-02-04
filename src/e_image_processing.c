@@ -162,18 +162,6 @@ static void image_set_pixel(const Image* image, IVec2 tex_coords, Pixel value)
     *ref = value;
 }
 
-static void
-    image_set_pixels_and_update_texture(Image* image, Pixel* pixels, IVec2 size)
-{
-    if (image->pixels)
-        free(image->pixels);
-    image->pixels = pixels;
-    image->w = size.x;
-    image->h = size.y;
-
-    image_update_gl_texture(image);
-}
-
 static Pixel image_sample_nearest(const Image* image, FVec2 fuv)
 {
     IVec2 uv = {
@@ -185,180 +173,240 @@ static Pixel image_sample_nearest(const Image* image, FVec2 fuv)
     return result;
 }
 
-typedef enum OperationType_
+#if 0
+typedef enum ImageOperationType_
 {
-    OperationType_Undefined = 0,
-    OperationType_Addition = 1,
-    OperationType_Subtraction,
-    OperationType_Product,
-    OperationType_Negative,
-    OperationType_Log,
-    OperationType_Power,
+    ImageOperationType_Undefined,
+    ImageOperationType_UnaryTransform,
+    ImageOperationType_BinaryTransform,
+    ImageOperationType_ConnectedComponentLabeling,
+    ImageOperationType_Count,
+} ImageOperationType;
 
-    OperationType_Count,
-} OperationType;
-
-static const char* g_op_str[OperationType_Count] = {
-    "", "Addition", "Subtraction", "Product", "Negative", "Log", "Power",
-};
-
-typedef struct OperationContext_ OperationContext;
-
-#define OP_TRANSFORM_FN_DECL(name)                                             \
-    float name(const OperationContext* op, const Image* images, float* values)
-typedef OP_TRANSFORM_FN_DECL(OpTransformFn);
-
-OP_TRANSFORM_FN_DECL(op_transform_add)
+typedef enum ImageUnaryTransformType_
 {
-    float result = HIMATH_CLAMP(values[0] + values[1], 0, 1);
-    return result;
-}
+    ImageUnaryTransformType_Undefined,
+    ImageUnaryTransformType_Addition,
+    ImageUnaryTransformType_Subtraction,
+    ImageUnaryTransformType_Product,
+    ImageUnaryTransformType_Count,
+} ImageUnaryTransformType;
 
-OP_TRANSFORM_FN_DECL(op_transform_sub)
+typedef enum ImageBinaryTransformType_
 {
-    float result = HIMATH_CLAMP(values[0] - values[1], 0, 1);
-    return result;
-}
+    ImageBinaryTransformType_Undefined,
+    ImageBinaryTransformType_Negative,
+    ImageBinaryTransformType_Log,
+    ImageBinaryTransformType_Power,
+    ImageBinaryTransformType_Count,
+} ImageBinaryTransformType_;
+#endif
 
-OP_TRANSFORM_FN_DECL(op_transform_product)
+typedef enum ImageOperationType_
 {
-    float result = HIMATH_CLAMP(values[0] * values[1], 0, 1);
-    return result;
-}
+    ImageOperationType_Undefined,
+    ImageOperationType_Addition,
+    ImageOperationType_Subtraction,
+    ImageOperationType_Product,
+    ImageOperationType_Negative,
+    ImageOperationType_Log,
+    ImageOperationType_Power,
+    ImageOperationType_CCL,
+    ImageOperationType_Count,
+} ImageOperationType;
 
-OP_TRANSFORM_FN_DECL(op_transform_negative)
+typedef struct ImageOperationArgs_
 {
-    float result = HIMATH_CLAMP(1.f - values[0], 0, 1);
-    return result;
-}
-
-OP_TRANSFORM_FN_DECL(op_transform_log);
-OP_TRANSFORM_FN_DECL(op_transform_power);
-
-OpTransformFn* g_op_transform_vtable[OperationType_Count] = {
-    NULL,
-    &op_transform_add,
-    &op_transform_sub,
-    &op_transform_product,
-    &op_transform_negative,
-    &op_transform_log,
-    &op_transform_power,
-};
-
-typedef struct OperationContext_
-{
-    OperationType type;
-    const Path* image_filepaths[2];
-    int image_filepaths_count;
-
-    float log_constant;
-    float log_base;
-
-    float power_constant;
-    float power_gamma;
-} OperationContext;
-
-OP_TRANSFORM_FN_DECL(op_transform_log)
-{
-    if (values[0] == 0)
-        return 0;
-
-    float log_2_value = log2f((float)images[0].max_color * values[0]);
-    float log_2_base = log2f(op->log_base);
-
-    float result = HIMATH_CLAMP((op->log_constant * log_2_value / log_2_base) /
-                                    images[0].max_color,
-                                0, 1);
-    return result;
-}
-
-OP_TRANSFORM_FN_DECL(op_transform_power)
-{
-    float power_value =
-        powf((float)images[0].max_color * values[0], op->power_gamma);
-    float result = HIMATH_CLAMP(
-        (op->power_constant * power_value) / images[0].max_color, 0, 1);
-    return result;
-}
-
-static bool op_is_image_selected(const OperationContext* op,
-                                 const Path* image_filepath)
-{
-    for (int i = 0; i < op->image_filepaths_count; i++)
+    ImageOperationType type;
+    union
     {
-        if (op->image_filepaths[i] == image_filepath)
-            return true;
-    }
-    return false;
-}
+        struct
+        {
+            Image other;
+        } add_sub_prod;
 
-static void op_push_image_path(OperationContext* op, const Path* image_filepath)
+        struct
+        {
+            int _;
+        } negative;
+
+        struct
+        {
+            float constant;
+            float base;
+        } log;
+
+        struct
+        {
+            float constant;
+            float gamma;
+        } power;
+
+        struct
+        {
+            uint8_t neighbor_bits;
+            float background_max_intensity;
+        } ccl;
+    };
+} ImageOperationArgs;
+
+#define IMAGE_OPERATION_FN_DECL(name)                                          \
+    Image name(Image* image, const ImageOperationArgs* args)
+typedef IMAGE_OPERATION_FN_DECL(ImageOperationFn);
+
+IMAGE_OPERATION_FN_DECL(image_operation_binary)
 {
-    if (op->image_filepaths_count >= ARRAY_LENGTH(op->image_filepaths))
-        return;
-    op->image_filepaths[op->image_filepaths_count++] = image_filepath;
+    ASSERT((args->type == ImageOperationType_Addition) ||
+           (args->type == ImageOperationType_Subtraction) ||
+           (args->type == ImageOperationType_Product));
+
+    const Image* other = &args->add_sub_prod.other;
+    int common_w = HIMATH_MAX(image->w, other->w);
+    int common_h = HIMATH_MAX(image->h, other->h);
+
+    Image result = {0};
+    image_init(&result, common_w, common_h, 255);
+
+    for (int y = 0; y < result.h; y++)
+    {
+        for (int x = 0; x < result.w; x++)
+        {
+            FVec2 fuv = {
+                (float)x / (float)result.w,
+                (float)y / (float)result.h,
+            };
+            Pixel c0 = image_sample_nearest(image, fuv);
+            Pixel c1 = image_sample_nearest(other, fuv);
+            Pixel result_c = {0};
+            switch (args->type)
+            {
+            case ImageOperationType_Addition:
+                result_c = (Pixel){
+                    .r = c0.r + c1.r,
+                    .g = c0.g + c1.g,
+                    .b = c0.b + c1.b,
+                    .a = 1,
+                };
+                break;
+            case ImageOperationType_Subtraction:
+                result_c = (Pixel){
+                    .r = c0.r - c1.r,
+                    .g = c0.g - c1.g,
+                    .b = c0.b - c1.b,
+                    .a = 1,
+                };
+                break;
+            case ImageOperationType_Product:
+                result_c = (Pixel){
+                    .r = c0.r * c1.r,
+                    .g = c0.g * c1.g,
+                    .b = c0.b * c1.b,
+                    .a = 1,
+                };
+            default: ASSERT(false);
+            }
+            image_set_pixel(&result, (IVec2){x, y}, result_c);
+        }
+    }
+
+    image_update_gl_texture(&result);
+
+    return result;
 }
 
-static Image op_execute(const OperationContext* op)
+float image_sub_operation_log(const Image* image,
+                              float value,
+                              float constant,
+                              float base)
+{
+    float result = 0;
+    if (value != 0)
+    {
+        float log_2_value = log2f((float)image->max_color * value);
+        float log_2_base = log2f(base);
+
+        result = HIMATH_CLAMP(
+            (constant * log_2_value / log_2_base) / image->max_color, 0, 1);
+    }
+
+    return result;
+}
+
+float image_sub_operation_power(const Image* image,
+                                float value,
+                                float constant,
+                                float gamma)
+{
+    float power_value = powf((float)image->max_color * value, gamma);
+    float result =
+        HIMATH_CLAMP((constant * power_value) / image->max_color, 0, 1);
+    return result;
+}
+
+IMAGE_OPERATION_FN_DECL(image_operation_unary)
+{
+    ASSERT((args->type == ImageOperationType_Negative) ||
+           (args->type == ImageOperationType_Log) ||
+           (args->type == ImageOperationType_Power));
+
+    Image result = {0};
+    image_init(&result, image->w, image->h, 255);
+
+    for (int y = 0; y < result.h; y++)
+    {
+        for (int x = 0; x < result.w; x++)
+        {
+            Pixel c = image_get_pixel_val(image, (IVec2){x, y});
+            switch (args->type)
+            {
+            case ImageOperationType_Negative:
+                c.r = 1.f - c.r;
+                c.g = 1.f - c.g;
+                c.b = 1.f - c.b;
+                break;
+            case ImageOperationType_Log:
+                c.r = image_sub_operation_log(image, c.r, args->log.constant,
+                                              args->log.base);
+                c.g = image_sub_operation_log(image, c.g, args->log.constant,
+                                              args->log.base);
+                c.b = image_sub_operation_log(image, c.b, args->log.constant,
+                                              args->log.base);
+                break;
+            case ImageOperationType_Power:
+                c.r = image_sub_operation_power(
+                    image, c.r, args->power.constant, args->power.gamma);
+                c.g = image_sub_operation_power(
+                    image, c.g, args->power.constant, args->power.gamma);
+                c.b = image_sub_operation_power(
+                    image, c.b, args->power.constant, args->power.gamma);
+                break;
+            }
+            image_set_pixel(&result, (IVec2){x, y}, c);
+        }
+    }
+
+    image_update_gl_texture(&result);
+
+    return result;
+}
+
+IMAGE_OPERATION_FN_DECL(image_operation_ccl)
 {
     Image result = {0};
-
-    int max_color = 255;
-
-    if (op->image_filepaths_count > 0)
-    {
-        Image images[ARRAY_LENGTH(op->image_filepaths)] = {0};
-        IVec2 result_image_size = {0};
-        for (int i = 0; i < op->image_filepaths_count; i++)
-        {
-            images[i] =
-                image_load_from_ppm(op->image_filepaths[i]->abs_path_str);
-            result_image_size.x = HIMATH_MAX(result_image_size.x, images[i].w);
-            result_image_size.y = HIMATH_MAX(result_image_size.y, images[i].h);
-        }
-
-        image_init(&result, result_image_size.x, result_image_size.y,
-                   max_color);
-
-        for (int y = 0; y < result.h; y++)
-        {
-            for (int x = 0; x < result.w; x++)
-            {
-                FVec2 uv = {
-                    result.w <= 1 ? 0 : (float)x / (float)(result.w - 1),
-                    result.h <= 1 ? 0 : (float)y / (float)(result.h - 1),
-                };
-                float r[ARRAY_LENGTH(images)] = {0};
-                float g[ARRAY_LENGTH(images)] = {0};
-                float b[ARRAY_LENGTH(images)] = {0};
-
-                for (int i = 0; i < op->image_filepaths_count; i++)
-                {
-                    Pixel c = image_sample_nearest(&images[i], uv);
-                    r[i] = c.r;
-                    g[i] = c.g;
-                    b[i] = c.b;
-                }
-
-                image_set_pixel(
-                    &result, (IVec2){x, y},
-                    (Pixel){
-                        .r = g_op_transform_vtable[op->type](op, images, r),
-                        .g = g_op_transform_vtable[op->type](op, images, g),
-                        .b = g_op_transform_vtable[op->type](op, images, b),
-                        .a = 1,
-                    });
-            }
-        }
-
-        image_update_gl_texture(&result);
-
-        for (int i = 0; i < op->image_filepaths_count; i++)
-            image_cleanup(&images[i]);
-    }
-
+    ASSERT(false);
     return result;
 }
+
+ImageOperationFn* g_image_operation_vtable[ImageOperationType_Count] = {
+    NULL,
+    &image_operation_binary,
+    &image_operation_binary,
+    &image_operation_binary,
+    &image_operation_unary,
+    &image_operation_unary,
+    &image_operation_unary,
+    &image_operation_ccl,
+};
 
 typedef struct ImageProcessing_
 {
@@ -369,16 +417,23 @@ typedef struct ImageProcessing_
     GLuint sampler_bilinear;
     GLuint current_sampler;
 
-    OperationContext op;
-
-    bool connectivity_flag[8];
-    IVec2 connectivity_direction[8];
-    float background_range;
-
     Path image_filepaths[100];
     int image_filepaths_count;
 
-    Image result_image;
+    int current_image_filepath_index;
+    Image current_image;
+
+    // Args
+    Image other_image;
+
+    float log_constant;
+    float log_base;
+
+    float power_constant;
+    float power_gamma;
+
+    uint8_t connectivity_bits;
+    float background_label_max_intensity;
 } ImageProcessing;
 
 static FILE_FOREACH_FN_DECL(append_filepath)
@@ -422,14 +477,7 @@ EXAMPLE_INIT_FN_SIG(image_processing)
     fs_for_each_files_with_ext(p, "ppm", &append_filepath, s);
     fs_path_cleanup(&p);
 
-    s->connectivity_direction[0] = (IVec2){-1, -1};
-    s->connectivity_direction[1] = (IVec2){0, -1};
-    s->connectivity_direction[2] = (IVec2){1, -1};
-    s->connectivity_direction[3] = (IVec2){-1, 0};
-    s->connectivity_direction[4] = (IVec2){1, 0};
-    s->connectivity_direction[5] = (IVec2){-1, 1};
-    s->connectivity_direction[6] = (IVec2){0, 1};
-    s->connectivity_direction[7] = (IVec2){1, 1};
+    s->current_image_filepath_index = -1;
 
     return e;
 }
@@ -438,11 +486,16 @@ EXAMPLE_CLEANUP_FN_SIG(image_processing)
 {
     Example* e = (Example*)udata;
     ImageProcessing* s = (ImageProcessing*)e->scene;
+    if (image_is_valid(&s->other_image))
+        image_cleanup(&s->other_image);
+    if (image_is_valid(&s->current_image))
+        image_cleanup(&s->current_image);
     for (int i = 0; i < s->image_filepaths_count; i++)
         fs_path_cleanup(&s->image_filepaths[i]);
+    glDeleteSamplers(1, &s->sampler_bilinear);
+    glDeleteSamplers(1, &s->sampler_nearest);
     glDeleteProgram(s->shader);
     r_vb_cleanup(&s->vb);
-    // glDeleteTextures(1, &s->texture);
     e_example_destroy(e);
 }
 
@@ -452,12 +505,41 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
     ImageProcessing* s = (ImageProcessing*)e->scene;
 
     igSetNextWindowPos((ImVec2){0, 0}, ImGuiCond_Once, (ImVec2){0, 0});
-    /*igSetNextWindowSize((ImVec2){500, (float)input->window_size.y},
-                        ImGuiCond_Once);*/
-    igBegin("Control Panel", NULL,
+    igBegin("Menus", NULL,
             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                 ImGuiWindowFlags_AlwaysAutoResize);
 
+    if (igButton("Reset", (ImVec2){0}))
+    {
+        if (image_is_valid(&s->current_image))
+            image_cleanup(&s->current_image);
+    }
+    igSeparator();
+
+    if (!image_is_valid(&s->current_image))
+    {
+        igText("Select Target Image");
+        igSeparator();
+        for (int i = 0; i < s->image_filepaths_count; i++)
+        {
+            if (igSelectable(s->image_filepaths[i].filename,
+                             s->current_image_filepath_index == i,
+                             ImGuiSelectableFlags_None, (ImVec2){0}))
+            {
+                s->current_image =
+                    image_load_from_ppm(s->image_filepaths[i].abs_path_str);
+                s->current_image_filepath_index = i;
+            }
+        }
+    }
+    else
+    {
+        igSelectable(
+            s->image_filepaths[s->current_image_filepath_index].filename, true,
+            ImGuiSelectableFlags_None, (ImVec2){0});
+    }
+
+#if 0
     if (igCollapsingHeader("I/O", ImGuiTreeNodeFlags_DefaultOpen))
     {
         if (image_is_valid(&s->result_image))
@@ -869,15 +951,16 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
             }
         }
     }
+#endif
 
     igEnd();
 
     glViewport(0, 0, input->window_size.x, input->window_size.y);
     glClear(GL_COLOR_BUFFER_BIT);
     glUseProgram(s->shader);
-    if (s->result_image.texture)
+    if (image_is_valid(&s->current_image))
     {
-        glBindTextureUnit(0, s->result_image.texture);
+        glBindTextureUnit(0, s->current_image.texture);
         glBindSampler(0, s->current_sampler);
         r_vb_draw(&s->vb);
     }
