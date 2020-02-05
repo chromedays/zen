@@ -199,7 +199,7 @@ static int get_point_index_colliding_mouse(const Graph* s, const Input* input)
 
 EXAMPLE_INIT_FN_SIG(graph)
 {
-    Example* e = e_example_make("graph", sizeof(Graph));
+    Example* e = e_example_make("graph", Graph);
     Graph* s = (Graph*)e->scene;
 
     s->point_mesh = rc_mesh_make_sphere(0.5f, 32, 32);
