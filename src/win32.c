@@ -37,17 +37,37 @@ LRESULT CALLBACK win32_message_callback(HWND window,
     switch (msg)
     {
     case WM_LBUTTONDOWN:
-    case WM_LBUTTONDBLCLK: g_input->mouse_down[0] = true; break;
-    case WM_LBUTTONUP: g_input->mouse_down[0] = false; break;
-    case WM_RBUTTONDOWN: SetCursor(NULL);
-    case WM_RBUTTONDBLCLK: g_input->mouse_down[1] = true; break;
+        if (GetCapture() == NULL)
+            SetCapture(window);
+        g_input->mouse_down[0] = true;
+        break;
+    case WM_LBUTTONUP:
+        if (GetCapture() == window)
+            ReleaseCapture();
+        g_input->mouse_down[0] = false;
+        break;
+    case WM_RBUTTONDOWN:
+        if (GetCapture() == NULL)
+            SetCapture(window);
+        SetCursor(NULL);
+        g_input->mouse_down[1] = true;
+        break;
     case WM_RBUTTONUP:
-        g_input->mouse_down[1] = false;
+        if (GetCapture() == window)
+            ReleaseCapture();
         SetCursor(g_cursor);
+        g_input->mouse_down[1] = false;
         break;
     case WM_MBUTTONDOWN:
-    case WM_MBUTTONDBLCLK: g_input->mouse_down[2] = true; break;
-    case WM_MBUTTONUP: g_input->mouse_down[2] = false; break;
+        if (GetCapture() == NULL)
+            SetCapture(window);
+        g_input->mouse_down[2] = true;
+        break;
+    case WM_MBUTTONUP:
+        if (GetCapture() == window)
+            ReleaseCapture();
+        g_input->mouse_down[2] = false;
+        break;
 
     case WM_SYSKEYDOWN:
     case WM_KEYDOWN:
@@ -98,9 +118,7 @@ bool win32_app_init(Win32App* app,
     g_cursor = wc.hCursor;
     if (RegisterClassExA(&wc))
     {
-        DWORD window_style =
-            ((WS_OVERLAPPEDWINDOW | WS_VISIBLE) ^ WS_THICKFRAME) ^
-            WS_MAXIMIZEBOX;
+        DWORD window_style = ((WS_OVERLAPPEDWINDOW | WS_VISIBLE));
         RECT window_rect = {
             .left = 0, .top = 0, .right = width, .bottom = height};
         AdjustWindowRectEx(&window_rect, window_style, 0, 0);

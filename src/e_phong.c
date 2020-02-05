@@ -35,7 +35,7 @@ typedef struct Phong_
 
 EXAMPLE_INIT_FN_SIG(phong)
 {
-    Example* e = (Example*)e_example_make("phong", sizeof(Phong));
+    Example* e = (Example*)e_example_make("phong", Phong);
     Phong* s = (Phong*)e->scene;
 
     s->cube_mesh = rc_mesh_make_cube();
@@ -43,7 +43,7 @@ EXAMPLE_INIT_FN_SIG(phong)
     s->diffuse_map = e_texture_load(e, "box_diffuse.png");
     s->specular_map = e_texture_load(e, "box_specular.png");
 
-    s->quad_mesh = rc_mesh_make_quad();
+    s->quad_mesh = rc_mesh_make_quad(1);
     r_vb_init(&s->transparent_vb, &s->quad_mesh, GL_TRIANGLES);
     s->grass_texture = e_texture_load(e, "grass.png");
     s->window_texture = e_texture_load(e, "transparent_window.png");

@@ -110,6 +110,15 @@ typedef union Mat4_
     float mm[4][4];
 } Mat4;
 
+typedef struct Quat_
+{
+    union
+    {
+        float e[4];
+        FVec4 v;
+    };
+} Quat;
+
 #ifdef __cplusplus
 HIMATH_ATTRIB Mat4 operator*(const Mat4& a, const Mat4& b);
 #endif //__cplusplus
@@ -124,6 +133,9 @@ HIMATH_ATTRIB Mat4 mat4_identity();
 HIMATH_ATTRIB Mat4 mat4_scalev(FVec3 s);
 HIMATH_ATTRIB Mat4 mat4_scale(float s);
 HIMATH_ATTRIB Mat4 mat4_translation(FVec3 v);
+HIMATH_ATTRIB Mat4 mat4_transform(FVec3 translation,
+                                  FVec3 scale,
+                                  Quat rotation);
 HIMATH_ATTRIB Mat4 mat4_lookat(FVec3 eye, FVec3 target, FVec3 up);
 HIMATH_ATTRIB Mat4 mat4_persp(float fov_y,
                               float aspect_ratio,
@@ -135,15 +147,6 @@ HIMATH_ATTRIB Mat4 mat4_ortho(float right,
                               float bottom,
                               float near_z,
                               float far_z);
-
-typedef struct Quat_
-{
-    union
-    {
-        float e[4];
-        FVec4 v;
-    };
-} Quat;
 
 #ifdef __cplusplus
 HIMATH_ATTRIB Quat operator*(Quat a, Quat b);
@@ -510,6 +513,18 @@ HIMATH_ATTRIB Mat4 mat4_scale(float s)
 HIMATH_ATTRIB Mat4 mat4_translation(FVec3 v)
 {
     Mat4 result = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, v.x, v.y, v.z, 1};
+    return result;
+}
+
+HIMATH_ATTRIB Mat4 mat4_transform(FVec3 translation, FVec3 scale, Quat rotation)
+{
+    Mat4 trans_mat = mat4_translation(translation);
+    Mat4 scale_mat = mat4_scalev(scale);
+    Mat4 rotation_mat = quat_to_matrix(rotation);
+
+    Mat4 result = mat4_mul(&rotation_mat, &scale_mat);
+    result = mat4_mul(&trans_mat, &result);
+
     return result;
 }
 

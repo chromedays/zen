@@ -8,9 +8,11 @@
 #include <stdlib.h>
 #include <math.h>
 
-Example* e_example_make(const char* name, size_t scene_size)
+Example*
+    e_example_make_impl(const char* name, size_t scene_size, size_t scene_align)
 {
-    Example* e = calloc(1, sizeof(Example) + scene_size);
+    void* mem = calloc(1, sizeof(Example) + scene_size + scene_align);
+    Example* e = (Example*)mem;
     e->name = name;
 
     glGenBuffers(1, &e->per_frame_ubo);
@@ -27,7 +29,9 @@ Example* e_example_make(const char* name, size_t scene_size)
 
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-    e->scene = e + 1;
+    uint8_t* scene_mem = (uint8_t*)mem + sizeof(Example);
+    scene_mem += (scene_align - ((uintptr_t)scene_mem % scene_align));
+    e->scene = scene_mem;
 
     return e;
 }
@@ -37,6 +41,16 @@ void e_example_destroy(Example* e)
     glDeleteBuffers(1, &e->per_frame_ubo);
     glDeleteBuffers(1, &e->per_object_ubo);
     free(e);
+}
+
+Mesh e_mesh_load_from_obj(const Example* e, const char* obj_filename)
+{
+    Path path = fs_path_make_working_dir();
+    fs_path_append3(&path, "shared", "models", obj_filename);
+    Mesh result = {0};
+
+    ASSERT(rc_mesh_load_from_obj(&result, path.abs_path_str));
+    return result;
 }
 
 GLuint e_shader_load(const Example* e, const char* shader_name)
@@ -199,8 +213,9 @@ void e_fpscam_update(ExampleFpsCamera* cam, const Input* input, float speed)
 
     if (input->mouse_down[1])
     {
-        cam->yaw_deg += (float)input->mouse_delta.x * 0.5f;
+        cam->yaw_deg -= (float)input->mouse_delta.x * 0.5f;
         cam->pitch_deg -= (float)input->mouse_delta.y * 0.5f;
+        cam->pitch_deg = HIMATH_CLAMP(cam->pitch_deg, -89, 89);
     }
 
     FVec3 look = e_fpscam_get_look(cam);
@@ -217,11 +232,11 @@ void e_fpscam_update(ExampleFpsCamera* cam, const Input* input, float speed)
 FVec3 e_fpscam_get_look(const ExampleFpsCamera* cam)
 {
     FVec3 look;
-    float yaw_rad = degtorad(cam->yaw_deg);
+    float yaw_rad = degtorad(cam->yaw_deg + 180);
     float pitch_rad = degtorad(cam->pitch_deg);
     look.x = sinf(yaw_rad) * cosf(pitch_rad);
     look.y = sinf(pitch_rad);
-    look.z = -cosf(yaw_rad);
+    look.z = cosf(yaw_rad) * cosf(pitch_rad);
     look = fvec3_normalize(look);
 
     return look;

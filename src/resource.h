@@ -41,9 +41,18 @@ Mesh rc_mesh_make_raw2(int vertices_count,
                        int indices_count,
                        Vertex* vertices,
                        uint* indices);
-Mesh rc_mesh_make_quad();
+Mesh rc_mesh_make_quad(float size);
 Mesh rc_mesh_make_cube();
 Mesh rc_mesh_make_sphere(float radius, int slices_count, int stacks_count);
 bool rc_mesh_load_from_obj(Mesh* mesh, const char* filename);
+void rc_mesh_set_approximate_normals(Mesh* mesh);
+
+typedef struct NormalizedTransform_
+{
+    float scale;
+    FVec3 pos;
+} NormalizedTransform;
+
+NormalizedTransform rc_mesh_calc_normalized_transform(const Mesh* mesh);
 
 #endif // RESOURCE_H
