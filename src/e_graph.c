@@ -574,6 +574,40 @@ static void render_graph(const Example* e, const Graph* s, Canvas canvas)
     plt_cleanup(&plotter);
 }
 
+#if 0
+static IVec2 graph_to_canvas(const Canvas* canvas,
+                             FVec2 graph_min,
+                             FVec2 graph_max,
+                             FVec3 pos_graph)
+{
+    FVec2 canvas_min = {
+        (float)canvas->pos.x,
+        (float)canvas->pos.y,
+    };
+    FVec2 canvas_max = {
+        (float)(canvas->pos.x + canvas->size.x),
+        (float)(canvas->pos.y + canvas->size.y),
+    };
+    FVec2 a = {
+        .x = (canvas_max.x - canvas_min.x) / (graph_max.x - graph_min.x),
+        .y = (canvas_max.y - canvas_min.y) / (graph_max.y - graph_min.y),
+    };
+
+    FVec2 b = {
+        .x = (graph_max.x * canvas_min.x) -
+             (canvas_max.x * graph_min.x) / (graph_max.x - graph_min.x),
+        .y = (graph_max.y * canvas_min.y) -
+             (canvas_max.y * graph_min.y) / (graph_max.y - graph_min.y),
+    };
+
+    IVec2 result = {
+        .x = (int)(pos_graph.x * a.x + b.x),
+        .y = (int)(pos_graph.y * a.y + b.y),
+    };
+    return result;
+}
+#endif
+
 static FVec3 canvas_to_graph(const Canvas* canvas,
                              FVec2 graph_min,
                              FVec2 graph_max,
@@ -608,26 +642,81 @@ static FVec3 canvas_to_graph(const Canvas* canvas,
     return result;
 }
 
+static bool is_pos_inside_canvas(const Canvas* canvas, IVec2 pos_screen)
+{
+    IVec2 canvas_min = canvas->pos;
+    IVec2 canvas_max = ivec2_add(canvas->pos, canvas->size);
+
+    bool result = false;
+
+    if (pos_screen.x >= canvas_min.x && pos_screen.x <= canvas_max.x &&
+        pos_screen.y >= canvas_min.y && pos_screen.y <= canvas_max.y)
+    {
+        result = true;
+    }
+
+    return result;
+}
+
 EXAMPLE_UPDATE_FN_SIG(graph)
 {
     Example* e = (Example*)udata;
     Graph* s = (Graph*)e->scene;
 
     const IVec2 canvas_size = {500, 400};
-    Canvas canvas = {
+    const Canvas canvas = {
         .pos = {input->window_size.x - 50 - canvas_size.x,
                 input->window_size.y - 50 - canvas_size.y},
         .size = canvas_size,
     };
 
-    IVec2 pos_screen = {
+    const IVec2 mouse_pos_screen = {
         input->mouse_pos.x,
         input->window_size.y - input->mouse_pos.y,
     };
+    const FVec3 mouse_pos_graph =
+        canvas_to_graph(&canvas, s->graph_min, s->graph_max, mouse_pos_screen);
 
-    FVec3 pos_graph =
-        canvas_to_graph(&canvas, s->graph_min, s->graph_max, pos_screen);
-    s->control_points[0] = pos_graph;
+    if (input->mouse_pressed[0])
+    {
+        for (int i = 0; i < s->control_points_count; i++)
+        {
+            FVec3 control_point = s->control_points[i];
+            float d = (control_point.x - mouse_pos_graph.x) *
+                          (control_point.x - mouse_pos_graph.x) +
+                      (control_point.y - mouse_pos_graph.y) *
+                          (control_point.y - mouse_pos_graph.y);
+            float radius_in_graph = s->control_point_radius / 100 * 0.5f;
+            if (d < radius_in_graph * radius_in_graph)
+            {
+                s->control_state.dragging_control_point_index = i;
+                break;
+            }
+        }
+    }
+
+    if (input->mouse_released[0])
+    {
+        if ((s->control_state.dragging_control_point_index < 0) &&
+            is_pos_inside_canvas(&canvas, mouse_pos_screen))
+        {
+            s->control_points[s->control_points_count++] = mouse_pos_graph;
+        }
+        else
+        {
+            s->control_state.dragging_control_point_index = -1;
+        }
+    }
+
+    if (s->control_state.dragging_control_point_index >= 0)
+    {
+        FVec3* control_point =
+            &s->control_points[s->control_state.dragging_control_point_index];
+        control_point->x =
+            HIMATH_CLAMP(mouse_pos_graph.x, s->graph_min.x, s->graph_max.x);
+        control_point->y =
+            HIMATH_CLAMP(mouse_pos_graph.y, s->graph_min.y, s->graph_max.y);
+    }
 
     render_graph(e, s, canvas);
 }
