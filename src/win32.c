@@ -40,33 +40,39 @@ LRESULT CALLBACK win32_message_callback(HWND window,
         if (GetCapture() == NULL)
             SetCapture(window);
         g_input->mouse_down[0] = true;
+        g_input->mouse_pressed[0] = true;
         break;
     case WM_LBUTTONUP:
         if (GetCapture() == window)
             ReleaseCapture();
         g_input->mouse_down[0] = false;
+        g_input->mouse_released[0] = true;
         break;
     case WM_RBUTTONDOWN:
         if (GetCapture() == NULL)
             SetCapture(window);
         SetCursor(NULL);
         g_input->mouse_down[1] = true;
+        g_input->mouse_pressed[1] = true;
         break;
     case WM_RBUTTONUP:
         if (GetCapture() == window)
             ReleaseCapture();
         SetCursor(g_cursor);
         g_input->mouse_down[1] = false;
+        g_input->mouse_released[1] = true;
         break;
     case WM_MBUTTONDOWN:
         if (GetCapture() == NULL)
             SetCapture(window);
         g_input->mouse_down[2] = true;
+        g_input->mouse_pressed[2] = true;
         break;
     case WM_MBUTTONUP:
         if (GetCapture() == window)
             ReleaseCapture();
         g_input->mouse_down[2] = false;
+        g_input->mouse_released[2] = true;
         break;
 
     case WM_SYSKEYDOWN:
@@ -194,6 +200,15 @@ void win32_register_input(Input* input)
     g_input->key_map[Key_A] = 'A';
     g_input->key_map[Key_S] = 'S';
     g_input->key_map[Key_D] = 'D';
+}
+
+void win32_pre_update_input()
+{
+    if (!g_input)
+        return;
+    Input* input = g_input;
+    memset(input->mouse_pressed, 0, sizeof(input->mouse_pressed));
+    memset(input->mouse_released, 0, sizeof(input->mouse_released));
 }
 
 void win32_update_input(const Win32App* app)
