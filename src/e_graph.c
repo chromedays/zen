@@ -325,12 +325,20 @@ typedef struct Method_
     float (*call)(Graph*, float);
 } Method;
 
+typedef struct ControlState_
+{
+    int dragging_control_point_index;
+} ControlState;
+
 #define MAX_CONTROL_POINTS_COUNT 20
 
 typedef struct Graph_
 {
     FVec3 control_points[MAX_CONTROL_POINTS_COUNT];
     int control_points_count;
+    float control_point_radius;
+
+    ControlState control_state;
 
     FVec2 graph_min;
     FVec2 graph_max;
@@ -496,14 +504,20 @@ EXAMPLE_INIT_FN_SIG(graph)
     Example* e = e_example_make("graph", Graph);
     Graph* s = (Graph*)e->scene;
 
-    s->graph_min = (FVec2){0, 0};
-    s->graph_max = (FVec2){5, 4};
     for (int i = 0; i < 3; i++)
     {
         s->control_points[i].x = (float)i + 1;
         s->control_points[i].y = (float)i + 1;
         s->control_points_count++;
     }
+    s->control_point_radius = 20;
+
+    s->control_state = (ControlState){
+        .dragging_control_point_index = -1,
+    };
+
+    s->graph_min = (FVec2){0, 0};
+    s->graph_max = (FVec2){5, 4};
 
     plt_renderer_init(e, &s->plot_renderer);
 
@@ -552,7 +566,7 @@ static void render_graph(const Example* e, const Graph* s, Canvas canvas)
     plt_points(&plotter, s->control_points, s->control_points_count,
                &(PlotAttribs){
                    .color = (FVec4){1, 0, 1, 1},
-                   .thickness = 20,
+                   .thickness = s->control_point_radius,
                });
     plotter.canvas = canvas;
     plt_draw(e, &plotter, &s->plot_renderer);
@@ -560,15 +574,60 @@ static void render_graph(const Example* e, const Graph* s, Canvas canvas)
     plt_cleanup(&plotter);
 }
 
+static FVec3 canvas_to_graph(const Canvas* canvas,
+                             FVec2 graph_min,
+                             FVec2 graph_max,
+                             IVec2 pos_screen)
+{
+    FVec2 canvas_min = {
+        (float)canvas->pos.x,
+        (float)canvas->pos.y,
+    };
+    FVec2 canvas_max = {
+        (float)(canvas->pos.x + canvas->size.x),
+        (float)(canvas->pos.y + canvas->size.y),
+    };
+    FVec2 a = {
+        .x = (graph_max.x - graph_min.x) / (canvas_max.x - canvas_min.x),
+        .y = (graph_max.y - graph_min.y) / (canvas_max.y - canvas_min.y),
+    };
+
+    FVec2 b = {
+        .x = (canvas_max.x * graph_min.x) -
+             (graph_max.x * canvas_min.x) / (canvas_max.x - canvas_min.x),
+        .y = (canvas_max.y * graph_min.y) -
+             (graph_max.y * canvas_min.y) / (canvas_max.y - canvas_min.y),
+    };
+
+    FVec3 result = {
+        .x = (float)pos_screen.x * a.x + b.x,
+        .y = (float)pos_screen.y * a.y + b.y,
+        .z = 0,
+    };
+
+    return result;
+}
+
 EXAMPLE_UPDATE_FN_SIG(graph)
 {
     Example* e = (Example*)udata;
     Graph* s = (Graph*)e->scene;
+
     const IVec2 canvas_size = {500, 400};
-    render_graph(e, s,
-                 (Canvas){
-                     .pos = {input->window_size.x - 50 - canvas_size.x,
-                             input->window_size.y - 50 - canvas_size.y},
-                     .size = canvas_size,
-                 });
+    Canvas canvas = {
+        .pos = {input->window_size.x - 50 - canvas_size.x,
+                input->window_size.y - 50 - canvas_size.y},
+        .size = canvas_size,
+    };
+
+    IVec2 pos_screen = {
+        input->mouse_pos.x,
+        input->window_size.y - input->mouse_pos.y,
+    };
+
+    FVec3 pos_graph =
+        canvas_to_graph(&canvas, s->graph_min, s->graph_max, pos_screen);
+    s->control_points[0] = pos_graph;
+
+    render_graph(e, s, canvas);
 }
