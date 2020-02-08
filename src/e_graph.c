@@ -626,7 +626,7 @@ static float calc_polynomial_nli_rec(
 static float g_nli_values[MAX_CONTROL_POINTS_COUNT * MAX_CONTROL_POINTS_COUNT];
 static void clear_nli_values()
 {
-    for (int i = 0; i <= MAX_CONTROL_POINTS_COUNT * MAX_CONTROL_POINTS_COUNT;
+    for (int i = 0; i < MAX_CONTROL_POINTS_COUNT * MAX_CONTROL_POINTS_COUNT;
          i++)
     {
         g_nli_values[i] = FLT_MAX;
@@ -755,10 +755,12 @@ EXAMPLE_UPDATE_FN_SIG(graph)
         }
     }
     static int div_count = 10;
+#if 0
     if (method == 2)
     {
         igSliderInt("Division count", &div_count, 2, 5, "%d");
     }
+#endif
     glClearColor(0.1f, 0.1f, 0.1f, 1);
     glViewport(0, 0, input->window_size.x, input->window_size.y);
     glDisable(GL_SCISSOR_TEST);
