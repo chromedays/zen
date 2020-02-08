@@ -807,17 +807,22 @@ EXAMPLE_UPDATE_FN_SIG(graph)
 
             int midpoints_count = 0;
 
+            for (int i = 0; i < s->control_points_count; i++)
+            {
+                results_x[results_count] = s->control_points[i].x;
+                results_y[results_count++] = s->control_points[i].y;
+            }
+
             // First iteration
             {
-                for (int i = 0; i < s->control_points_count; i++)
-                {
-                    midpoints_x[midpoints_count] = s->control_points[i].x;
-                    midpoints_y[midpoints_count++] = s->control_points[i].y;
-                }
+                memcpy(midpoints_x, results_x, results_count * sizeof(float));
+                memcpy(midpoints_y, results_y, results_count * sizeof(float));
+                midpoints_count = results_count;
                 calc_polynomial_nli(midpoints_x, midpoints_count, 0.5f);
                 int begin = 0;
                 int end = 0;
 
+                results_count = 0;
                 while (begin < s->control_points_count)
                 {
                     results_x[results_count++] =
