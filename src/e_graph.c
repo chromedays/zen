@@ -520,170 +520,8 @@ EXAMPLE_CLEANUP_FN_SIG(graph)
     e_example_destroy(e);
 }
 
-EXAMPLE_UPDATE_FN_SIG(graph)
+static void render_graph(const Example* e, const Graph* s, Canvas canvas)
 {
-    Example* e = (Example*)udata;
-    Graph* s = (Graph*)e->scene;
-
-#if 0
-    set_world_bound(s, input);
-
-    if (!s->is_dragging && input->mouse_down[0])
-    {
-        s->dragged_point_index = get_point_index_colliding_mouse(s, input);
-        if (s->dragged_point_index >= 0)
-            s->is_dragging = true;
-    }
-
-    if (s->is_dragging && !input->mouse_down[0])
-    {
-        s->is_dragging = false;
-        s->dragged_point_index = -1;
-    }
-
-    if (s->is_dragging)
-    {
-        s->coeffs[s->dragged_point_index] =
-            world_to_graph_y(s, get_world_mouse_pos(input).y);
-    }
-
-    igSetNextWindowPos((ImVec2){0, 0}, ImGuiCond_Once, (ImVec2){0, 0});
-    igBegin("Settings", NULL,
-            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                ImGuiWindowFlags_AlwaysAutoResize);
-    igText("Degree");
-    igSameLine(0, -1);
-    igSliderInt("##Degree", &s->degree, 1, MAX_DEGREE, "%d");
-    igText("Method");
-    igSameLine(0, -1);
-    if (igBeginCombo("##Method", s->methods[s->current_method_index].name, 0))
-    {
-        for (int i = 0; i < ARRAY_LENGTH(s->methods); i++)
-        {
-            bool is_selected = i == s->current_method_index;
-            if (igSelectable(s->methods[i].name, is_selected, 0,
-                             (ImVec2){0, 0}))
-            {
-                s->current_method_index = i;
-            }
-        }
-        igEndCombo();
-    }
-    igEnd();
-
-    {
-        igSetNextWindowSize((ImVec2){30, 10}, ImGuiCond_Always);
-
-        ImGuiWindowFlags flags =
-            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav |
-            ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground;
-
-        FVec2 p = world_to_screen(input, graph_to_world(s, s->graph_min));
-        p.y -= 20;
-        p.x -= 30;
-        igSetNextWindowPos((ImVec2){p.x, p.y}, ImGuiCond_Once, (ImVec2){0, 0});
-        igBegin("-3", NULL, flags);
-        igText("-3");
-        igEnd();
-
-        p = world_to_screen(
-            input, graph_to_world(s, (FVec2){s->graph_min.x, s->graph_max.y}));
-        p.y -= 10;
-        p.x -= 30;
-        igSetNextWindowPos((ImVec2){p.x, p.y}, ImGuiCond_Once, (ImVec2){0, 0});
-        igBegin(" 3", NULL, flags);
-        igText(" 3");
-        igEnd();
-
-        p = world_to_screen(input, graph_to_world(s, s->graph_min));
-        p.x -= 10;
-        igSetNextWindowPos((ImVec2){p.x, p.y}, ImGuiCond_Once, (ImVec2){0, 0});
-        igBegin("0", NULL, flags);
-        igText("0");
-        igEnd();
-
-        p = world_to_screen(
-            input, graph_to_world(s, (FVec2){s->graph_max.x, s->graph_min.y}));
-        p.x -= 10;
-        igSetNextWindowPos((ImVec2){p.x, p.y}, ImGuiCond_Once, (ImVec2){0, 0});
-        igBegin("1", NULL, flags);
-        igText("1");
-        igEnd();
-    }
-#endif
-
-#if 0
-    ExamplePerFrameUBO per_frame = {0};
-    per_frame.view =
-        mat4_lookat((FVec3){0, 0, 50}, (FVec3){0, 0, 0}, (FVec3){0, 1, 0});
-    per_frame.proj = mat4_ortho((float)input->window_size.x, 0,
-                                (float)input->window_size.y, 0, 0.1f, 100);
-    e_apply_per_frame_ubo(e, &per_frame);
-
-    glClearColor(0.1f, 0.1f, 0.1f, 1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(s->unlit_shader);
-    {
-        ExamplePerObjectUBO per_object = {0};
-        Mat4 trans = mat4_translation(
-            (FVec3){HIMATH_MIN(s->world_max.x, s->world_min.x),
-                    HIMATH_MIN(s->world_max.y, s->world_min.y), -1});
-        Mat4 scale =
-            mat4_scalev((FVec3){fabsf(s->world_max.x - s->world_min.x),
-                                fabsf(s->world_max.y - s->world_min.y)});
-        per_object.model = mat4_mul(&trans, &scale);
-        per_object.color = (FVec3){0.3f, 0.3f, 0.3f};
-        e_apply_per_object_ubo(e, &per_object);
-        r_vb_draw(&s->canvas_vb);
-    }
-
-    int hovering_point_index = get_point_index_colliding_mouse(s, input);
-    for (int i = 0; i <= s->degree; i++)
-    {
-        FVec2 gp = get_coeff_graph_pos(s, i);
-        FVec2 wp = graph_to_world(s, gp);
-
-        ExamplePerObjectUBO per_object = {0};
-        Mat4 trans = mat4_translation((FVec3){wp.x, wp.y, 0});
-        Mat4 scale = mat4_scale(POINT_RADIUS * 2.f);
-        per_object.model = mat4_mul(&trans, &scale);
-        if (s->is_dragging && (i == s->dragged_point_index))
-            per_object.color = (FVec3){0.6f, 0, 0};
-        else if (i == hovering_point_index)
-            per_object.color = (FVec3){1, 0, 0};
-        else
-            per_object.color = (FVec3){0, 1, 0};
-        e_apply_per_object_ubo(e, &per_object);
-        r_vb_draw(&s->point_vb);
-    }
-
-    for (int i = 0; i < ARRAY_LENGTH(s->curve_points); i++)
-    {
-        float step_x = 1.f / (ARRAY_LENGTH(s->curve_points) - 1);
-        float t = (float)i * step_x;
-        float p = s->methods[s->current_method_index].call(s, t);
-
-        FVec2 gp = {0};
-        gp.x = t;
-        gp.y = p;
-        FVec2 wp = graph_to_world(s, gp);
-        s->curve_points[i] = (FVec3){wp.x, wp.y, 1};
-    }
-    {
-        ExamplePerObjectUBO per_object = {0};
-        per_object.model = mat4_identity();
-        per_object.color = (FVec3){1, 0, 1};
-        e_apply_per_object_ubo(e, &per_object);
-    }
-    glBindBuffer(GL_ARRAY_BUFFER, s->curve_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(s->curve_points),
-                    s->curve_points);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(s->curve_vao);
-    glDrawArrays(GL_LINE_STRIP, 0, ARRAY_LENGTH(s->curve_points));
-    glBindVertexArray(0);
-#endif
-
     Plotter plotter;
     plt_init(&plotter);
     plt_set_axis_attribs(&plotter, &(AxisAttribs){
@@ -716,13 +554,21 @@ EXAMPLE_UPDATE_FN_SIG(graph)
                    .color = (FVec4){1, 0, 1, 1},
                    .thickness = 20,
                });
-    const IVec2 canvas_size = {500, 400};
-    plotter.canvas = (Canvas){
-        .pos = {input->window_size.x - 50 - canvas_size.x,
-                input->window_size.y - 50 - canvas_size.y},
-        .size = canvas_size,
-    };
+    plotter.canvas = canvas;
     plt_draw(e, &plotter, &s->plot_renderer);
 
     plt_cleanup(&plotter);
+}
+
+EXAMPLE_UPDATE_FN_SIG(graph)
+{
+    Example* e = (Example*)udata;
+    Graph* s = (Graph*)e->scene;
+    const IVec2 canvas_size = {500, 400};
+    render_graph(e, s,
+                 (Canvas){
+                     .pos = {input->window_size.x - 50 - canvas_size.x,
+                             input->window_size.y - 50 - canvas_size.y},
+                     .size = canvas_size,
+                 });
 }
