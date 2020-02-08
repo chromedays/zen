@@ -275,6 +275,11 @@ static void plt_draw(const Example* e, const Plotter* p, const PlotRenderer* r)
 
     if (total_line_points_count > 0)
     {
+        ExamplePerObjectUBO per_object = {
+            .model = mat4_identity(),
+            .color = (FVec3){1, 1, 1},
+        };
+        e_apply_per_object_ubo(e, &per_object);
         glBindVertexArray(r->lines_vao);
         glDrawArrays(GL_LINE_STRIP, 0, total_line_points_count);
     }
@@ -504,7 +509,7 @@ EXAMPLE_INIT_FN_SIG(graph)
     Example* e = e_example_make("graph", Graph);
     Graph* s = (Graph*)e->scene;
 
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 2; i++)
     {
         s->control_points[i].x = (float)i + 1;
         s->control_points[i].y = (float)i + 1;
@@ -534,7 +539,11 @@ EXAMPLE_CLEANUP_FN_SIG(graph)
     e_example_destroy(e);
 }
 
-static void render_graph(const Example* e, const Graph* s, Canvas canvas)
+static void render_graph(const Example* e,
+                         const Graph* s,
+                         Canvas canvas,
+                         FVec3* values,
+                         int values_count)
 {
     Plotter plotter;
     plt_init(&plotter);
@@ -568,6 +577,12 @@ static void render_graph(const Example* e, const Graph* s, Canvas canvas)
                    .color = (FVec4){1, 0, 1, 1},
                    .thickness = s->control_point_radius,
                });
+    plt_lines(&plotter, values, values_count,
+              &(PlotAttribs){
+                  .color = (FVec4){1, 1, 1, 1},
+                  .thickness = 3,
+              });
+
     plotter.canvas = canvas;
     plt_draw(e, &plotter, &s->plot_renderer);
 
@@ -658,6 +673,45 @@ static bool is_pos_inside_canvas(const Canvas* canvas, IVec2 pos_screen)
     return result;
 }
 
+static float calc_polynomial_nli_rec(
+    float* coeffs,
+    int coeffs_count,
+    float* values, // count = (coeffs_count * coeffs_count)
+    int begin,
+    int end,
+    float t)
+{
+    if ((end - begin) == 1)
+        return (1.f - t) * coeffs[begin] + t * coeffs[end];
+
+    if (values[begin * coeffs_count + end] != FLT_MAX)
+        return values[begin * coeffs_count + end];
+
+    float result =
+        (1.f - t) * calc_polynomial_nli_rec(coeffs, coeffs_count, values, begin,
+                                            end - 1, t) +
+        t * calc_polynomial_nli_rec(coeffs, coeffs_count, values, begin + 1,
+                                    end, t);
+
+    values[begin * coeffs_count + end] = result;
+
+    return result;
+}
+
+static float g_nli_values[MAX_CONTROL_POINTS_COUNT * MAX_CONTROL_POINTS_COUNT];
+
+static float calc_polynomial_nli(float* coeffs, int coeffs_count, float t)
+{
+    for (int i = 0; i <= MAX_CONTROL_POINTS_COUNT * MAX_CONTROL_POINTS_COUNT;
+         i++)
+    {
+        g_nli_values[i] = FLT_MAX;
+    }
+
+    return calc_polynomial_nli_rec(coeffs, coeffs_count, g_nli_values, 0,
+                                   coeffs_count - 1, t);
+}
+
 EXAMPLE_UPDATE_FN_SIG(graph)
 {
     Example* e = (Example*)udata;
@@ -720,5 +774,25 @@ EXAMPLE_UPDATE_FN_SIG(graph)
             HIMATH_CLAMP(mouse_pos_graph.y, s->graph_min.y, s->graph_max.y);
     }
 
-    render_graph(e, s, canvas);
+    {
+        float* coeffs_x = malloc(s->control_points_count * sizeof(float));
+        float* coeffs_y = malloc(s->control_points_count * sizeof(float));
+        FVec3 values[100] = {0};
+        for (int t = 0; t < 100; t++)
+        {
+            for (int i = 0; i < s->control_points_count; i++)
+            {
+                coeffs_x[i] = s->control_points[i].x;
+                coeffs_y[i] = s->control_points[i].y;
+            }
+            values[t].x = calc_polynomial_nli(coeffs_x, s->control_points_count,
+                                              (float)t / 100.f);
+            values[t].y = calc_polynomial_nli(coeffs_y, s->control_points_count,
+                                              (float)t / 100.f);
+        }
+        render_graph(e, s, canvas, values, 100);
+
+        free(coeffs_x);
+        free(coeffs_y);
+    }
 }
