@@ -510,7 +510,7 @@ EXAMPLE_INIT_FN_SIG(graph)
         s->control_points[i].y = (float)i + 1;
         s->control_points_count++;
     }
-    s->control_point_radius = 20;
+    s->control_point_radius = 40;
 
     s->control_state = (ControlState){
         .dragging_control_point_index = -1,
@@ -686,7 +686,8 @@ EXAMPLE_UPDATE_FN_SIG(graph)
                           (control_point.x - mouse_pos_graph.x) +
                       (control_point.y - mouse_pos_graph.y) *
                           (control_point.y - mouse_pos_graph.y);
-            float radius_in_graph = s->control_point_radius / 100 * 0.5f;
+            float radius_in_graph =
+                (s->control_point_radius / 100 * 0.5f) * 1.1f;
             if (d < radius_in_graph * radius_in_graph)
             {
                 s->control_state.dragging_control_point_index = i;
@@ -698,7 +699,8 @@ EXAMPLE_UPDATE_FN_SIG(graph)
     if (input->mouse_released[0])
     {
         if ((s->control_state.dragging_control_point_index < 0) &&
-            is_pos_inside_canvas(&canvas, mouse_pos_screen))
+            is_pos_inside_canvas(&canvas, mouse_pos_screen) &&
+            (s->control_points_count < MAX_CONTROL_POINTS_COUNT))
         {
             s->control_points[s->control_points_count++] = mouse_pos_graph;
         }
