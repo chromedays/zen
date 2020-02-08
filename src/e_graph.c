@@ -768,31 +768,116 @@ EXAMPLE_UPDATE_FN_SIG(graph)
             coeffs_x[i] = s->control_points[i].x;
             coeffs_y[i] = s->control_points[i].y;
         }
-        for (int t = 0; t < 100; t++)
+
+        int div_count = 2;
+        int max_midpoints_count =
+            (1 << (div_count - 1)) * (s->control_points_count - 1) + 1;
+        int results_count = 0;
+        float* results_x = malloc(max_midpoints_count * sizeof(float));
+        float* results_y = malloc(max_midpoints_count * sizeof(float));
+
+        if (method == 0 || method == 1)
         {
-            switch (method)
+            for (int t = 0; t < 100; t++)
             {
-            case 0:
-                values[t].x = calc_polynomial_nli(
-                    coeffs_x, s->control_points_count, (float)t / 100.f);
-                values[t].y = calc_polynomial_nli(
-                    coeffs_y, s->control_points_count, (float)t / 100.f);
+                switch (method)
+                {
+                case 0:
+                    values[t].x = calc_polynomial_nli(
+                        coeffs_x, s->control_points_count, (float)t / 100.f);
+                    values[t].y = calc_polynomial_nli(
+                        coeffs_y, s->control_points_count, (float)t / 100.f);
+                    break;
+                case 1:
+                    values[t].x = calc_polynomial_bb(
+                        coeffs_x, s->control_points_count, (float)t / 100.f);
+                    values[t].y = calc_polynomial_bb(
+                        coeffs_y, s->control_points_count, (float)t / 100.f);
+                    break;
+                case 2: {
+                }
                 break;
-            case 1:
-                values[t].x = calc_polynomial_bb(
-                    coeffs_x, s->control_points_count, (float)t / 100.f);
-                values[t].y = calc_polynomial_bb(
-                    coeffs_y, s->control_points_count, (float)t / 100.f);
-                break;
-            case 2: break;
+                }
             }
+        }
+        else if (method == 2)
+        {
+            float* midpoints_x = malloc(max_midpoints_count * sizeof(float));
+            float* midpoints_y = malloc(max_midpoints_count * sizeof(float));
+
+            int midpoints_count = 0;
+
+            // First iteration
+            {
+                for (int i = 0; i < s->control_points_count; i++)
+                {
+                    midpoints_x[midpoints_count] = s->control_points[i].x;
+                    midpoints_y[midpoints_count++] = s->control_points[i].y;
+                }
+                calc_polynomial_nli(midpoints_x, midpoints_count, 0.5f);
+                int begin = 0;
+                int end = 0;
+
+                while (begin < s->control_points_count)
+                {
+                    results_x[results_count++] =
+                        begin == end ?
+                            midpoints_x[begin] :
+                            g_nli_values[begin * midpoints_count + end];
+                    if (end < s->control_points_count - 1)
+                        ++end;
+                    else
+                        ++begin;
+                }
+                calc_polynomial_nli(midpoints_y, midpoints_count, 0.5f);
+                begin = end = 0;
+                results_count = 0;
+                while (begin < s->control_points_count)
+                {
+                    results_y[results_count++] =
+                        begin == end ?
+                            midpoints_y[begin] :
+                            g_nli_values[begin * midpoints_count + end];
+                    if (end < s->control_points_count - 1)
+                        ++end;
+                    else
+                        ++begin;
+                }
+            }
+
+#if 0
+                int iteration_count = 2;
+
+                for (int i = 1; i < div_count; i++)
+                {
+                    for (int j = 0; j < iteration_count; j++)
+                    {
+                        for (int k = 0; k < s->control_points_count; k++)
+                        {
+                            int midpoints_begin = k + j * 2;
+                            ASSERT((midpoints_begin + s->control_points_count) <
+                                   midpoints_count);
+                            calc_polynomial_nli(midpoints_x + midpoints_begin,
+                                                s->control_points_count, 0.5f);
+                            calc_polynomial_nli(midpoints_y + midpoints_begin,
+                                                s->control_points_count, 0.5f);
+                        }
+                    }
+                    iteration_count *= 2;
+                }
+#endif
+
+            free(midpoints_x);
+            free(midpoints_y);
         }
 
         int shell_points_count =
             s->control_points_count * (s->control_points_count - 1) / 2;
         FVec3* shell_points = calloc(shell_points_count, sizeof(FVec3));
-        int shell_points_index = 0;
+
+        if (method == 0)
         {
+            int shell_points_index = 0;
             float t = shell_t;
             calc_polynomial_nli(coeffs_x, s->control_points_count, t);
             for (int i = 1; i < s->control_points_count; i++)
@@ -867,6 +952,30 @@ EXAMPLE_UPDATE_FN_SIG(graph)
                 offset += i;
             }
         }
+
+        if (method == 2)
+        {
+            FVec3* results = calloc(results_count, sizeof(FVec3));
+            for (int i = 0; i < results_count; i++)
+            {
+                results[i].x = results_x[i];
+                results[i].y = results_y[i];
+            }
+            plt_points(&plotter, results, results_count,
+                       &(PlotAttribs){
+                           .color = (FVec4){1, 0, 0, 1},
+                           .thickness = s->control_point_radius * 0.2f,
+                       });
+            plt_lines(&plotter, results, results_count,
+                      &(PlotAttribs){
+                          .color = (FVec4){1, 0, 0, 1},
+                          .thickness = s->control_point_radius * 0.3f,
+                      });
+            free(results);
+        }
+
+        free(results_x);
+        free(results_y);
 
         plt_points(&plotter, s->control_points, s->control_points_count,
                    &(PlotAttribs){
