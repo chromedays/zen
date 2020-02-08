@@ -506,53 +506,6 @@ static void render_graph(const Example* e,
                          FVec3* values,
                          int values_count)
 {
-    Plotter plotter;
-    plt_init(&plotter);
-    plt_set_axis_attribs(&plotter, &(AxisAttribs){
-                                       .attribs = {{
-                                                       .name = "X",
-                                                       .range_min = 0,
-                                                       .range_max = 1,
-                                                   },
-                                                   {
-                                                       .name = "Y",
-                                                       .range_min = -1,
-                                                       .range_max = 1,
-                                                   }},
-                                   });
-
-    plt_set_axis_attribs(&plotter, &(AxisAttribs){
-                                       .attribs =
-                                           {
-                                               {.name = "X",
-                                                .range_min = s->graph_min.x,
-                                                .range_max = s->graph_max.x},
-                                               {.name = "Y",
-                                                .range_min = s->graph_min.y,
-                                                .range_max = s->graph_max.y},
-                                           },
-                                   });
-
-    plt_points(&plotter, s->control_points, s->control_points_count,
-               &(PlotAttribs){
-                   .color = (FVec4){1, 0, 1, 1},
-                   .thickness = s->control_point_radius,
-               });
-
-    plt_lines(&plotter, s->control_points, s->control_points_count,
-              &(PlotAttribs){
-                  .color = (FVec4){1, 1, 0, 1},
-              });
-
-    plt_lines(&plotter, values, values_count,
-              &(PlotAttribs){
-                  .color = (FVec4){1, 1, 1, 1},
-              });
-
-    plotter.canvas = canvas;
-    plt_draw(e, &plotter, &s->plot_renderer);
-
-    plt_cleanup(&plotter);
 }
 
 #if 0
@@ -640,24 +593,30 @@ static bool is_pos_inside_canvas(const Canvas* canvas, IVec2 pos_screen)
 }
 
 static float calc_polynomial_nli_rec(
-    float* coeffs,
+    const float* coeffs,
     int coeffs_count,
     float* values, // count = (coeffs_count * coeffs_count)
     int begin,
     int end,
     float t)
 {
+    float result = 0;
     if ((end - begin) == 1)
-        return (1.f - t) * coeffs[begin] + t * coeffs[end];
-
-    if (values[begin * coeffs_count + end] != FLT_MAX)
-        return values[begin * coeffs_count + end];
-
-    float result =
-        (1.f - t) * calc_polynomial_nli_rec(coeffs, coeffs_count, values, begin,
-                                            end - 1, t) +
-        t * calc_polynomial_nli_rec(coeffs, coeffs_count, values, begin + 1,
-                                    end, t);
+    {
+        result = (1.f - t) * coeffs[begin] + t * coeffs[end];
+    }
+    else if (values[begin * coeffs_count + end] != FLT_MAX)
+    {
+        result = values[begin * coeffs_count + end];
+    }
+    else
+    {
+        result =
+            (1.f - t) * calc_polynomial_nli_rec(coeffs, coeffs_count, values,
+                                                begin, end - 1, t) +
+            t * calc_polynomial_nli_rec(coeffs, coeffs_count, values, begin + 1,
+                                        end, t);
+    }
 
     values[begin * coeffs_count + end] = result;
 
@@ -665,14 +624,18 @@ static float calc_polynomial_nli_rec(
 }
 
 static float g_nli_values[MAX_CONTROL_POINTS_COUNT * MAX_CONTROL_POINTS_COUNT];
-
-static float calc_polynomial_nli(float* coeffs, int coeffs_count, float t)
+static void clear_nli_values()
 {
     for (int i = 0; i <= MAX_CONTROL_POINTS_COUNT * MAX_CONTROL_POINTS_COUNT;
          i++)
     {
         g_nli_values[i] = FLT_MAX;
     }
+}
+
+static float calc_polynomial_nli(const float* coeffs, int coeffs_count, float t)
+{
+    clear_nli_values();
 
     return calc_polynomial_nli_rec(coeffs, coeffs_count, g_nli_values, 0,
                                    coeffs_count - 1, t);
@@ -767,31 +730,165 @@ EXAMPLE_UPDATE_FN_SIG(graph)
             HIMATH_CLAMP(mouse_pos_graph.y, s->graph_min.y, s->graph_max.y);
     }
 
+    const char* method_names[3] = {
+        "NLI",
+        "BB form",
+        "Midpoint Subdivision",
+    };
+    static int method = 0;
+
+    for (int i = 0; i < 3; i++)
+    {
+        if (igButton(method_names[i], (ImVec2){0}))
+            method = i;
+    }
+    igText("Current: %s", method_names[method]);
+
+    static float shell_t = 0.5f;
+    static bool draw_shell = true;
+    if (method == 0)
+    {
+        igSliderFloat("Shell T", &shell_t, 0, 1, "%.3f", 1);
+        if (igRadioButtonBool("Draw Shell", draw_shell))
+        {
+            draw_shell = !draw_shell;
+        }
+    }
+    glClearColor(0.1f, 0.1f, 0.1f, 1);
+    glViewport(0, 0, input->window_size.x, input->window_size.y);
+    glDisable(GL_SCISSOR_TEST);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
     {
         float* coeffs_x = malloc(s->control_points_count * sizeof(float));
         float* coeffs_y = malloc(s->control_points_count * sizeof(float));
         FVec3 values[100] = {0};
+        for (int i = 0; i < s->control_points_count; i++)
+        {
+            coeffs_x[i] = s->control_points[i].x;
+            coeffs_y[i] = s->control_points[i].y;
+        }
         for (int t = 0; t < 100; t++)
         {
-            for (int i = 0; i < s->control_points_count; i++)
+            switch (method)
             {
-                coeffs_x[i] = s->control_points[i].x;
-                coeffs_y[i] = s->control_points[i].y;
+            case 0:
+                values[t].x = calc_polynomial_nli(
+                    coeffs_x, s->control_points_count, (float)t / 100.f);
+                values[t].y = calc_polynomial_nli(
+                    coeffs_y, s->control_points_count, (float)t / 100.f);
+                break;
+            case 1:
+                values[t].x = calc_polynomial_bb(
+                    coeffs_x, s->control_points_count, (float)t / 100.f);
+                values[t].y = calc_polynomial_bb(
+                    coeffs_y, s->control_points_count, (float)t / 100.f);
+                break;
+            case 2: break;
             }
-#if 0
-            values[t].x = calc_polynomial_nli(coeffs_x, s->control_points_count,
-                                              (float)t / 100.f);
-            values[t].y = calc_polynomial_nli(coeffs_y, s->control_points_count,
-                                              (float)t / 100.f);
-#endif
-            values[t].x = calc_polynomial_bb(coeffs_x, s->control_points_count,
-                                             (float)t / 100.f);
-            values[t].y = calc_polynomial_bb(coeffs_y, s->control_points_count,
-                                             (float)t / 100.f);
         }
-        render_graph(e, s, canvas, values, 100);
+
+        int shell_points_count =
+            s->control_points_count * (s->control_points_count - 1) / 2;
+        FVec3* shell_points = calloc(shell_points_count, sizeof(FVec3));
+        int shell_points_index = 0;
+        {
+            float t = shell_t;
+            calc_polynomial_nli(coeffs_x, s->control_points_count, t);
+            for (int i = 1; i < s->control_points_count; i++)
+            {
+                for (int j = 0; (j + i) < s->control_points_count; ++j)
+                {
+                    int a = j;
+                    int b = j + i;
+                    ASSERT(shell_points_index < shell_points_count);
+                    float shell_value =
+                        g_nli_values[a * s->control_points_count + b];
+                    ASSERT(shell_value != FLT_MAX);
+                    shell_points[shell_points_index++].x = shell_value;
+                }
+            }
+            shell_points_index = 0;
+            calc_polynomial_nli(coeffs_y, s->control_points_count, t);
+            for (int i = 1; i < s->control_points_count; i++)
+            {
+                for (int j = 0; (j + i) < s->control_points_count; ++j)
+                {
+                    int a = j;
+                    int b = j + i;
+                    ASSERT(shell_points_index < shell_points_count);
+                    shell_points[shell_points_index++].y =
+                        g_nli_values[a * s->control_points_count + b];
+                }
+            }
+        }
 
         free(coeffs_x);
         free(coeffs_y);
+
+        Plotter plotter;
+        plt_init(&plotter);
+        plt_set_axis_attribs(&plotter, &(AxisAttribs){
+                                           .attribs = {{
+                                                           .name = "X",
+                                                           .range_min = 0,
+                                                           .range_max = 1,
+                                                       },
+                                                       {
+                                                           .name = "Y",
+                                                           .range_min = -1,
+                                                           .range_max = 1,
+                                                       }},
+                                       });
+
+        plt_set_axis_attribs(&plotter,
+                             &(AxisAttribs){
+                                 .attribs =
+                                     {
+                                         {.name = "X",
+                                          .range_min = s->graph_min.x,
+                                          .range_max = s->graph_max.x},
+                                         {.name = "Y",
+                                          .range_min = s->graph_min.y,
+                                          .range_max = s->graph_max.y},
+                                     },
+                             });
+
+        if (method == 0 && draw_shell)
+        {
+            int offset = 0;
+            for (int i = s->control_points_count - 1; i > 0; i--)
+            {
+                plt_lines(&plotter, shell_points + offset, i,
+                          &(PlotAttribs){
+                              .color = (FVec4){1, 1, 1, 1},
+                              .thickness = s->control_point_radius * 0.3f,
+                          });
+                offset += i;
+            }
+        }
+
+        plt_points(&plotter, s->control_points, s->control_points_count,
+                   &(PlotAttribs){
+                       .color = (FVec4){1, 0, 1, 1},
+                       .thickness = s->control_point_radius,
+                   });
+
+        plt_lines(&plotter, s->control_points, s->control_points_count,
+                  &(PlotAttribs){
+                      .color = (FVec4){1, 1, 0, 1},
+                  });
+
+        plt_lines(&plotter, values, ARRAY_LENGTH(values),
+                  &(PlotAttribs){
+                      .color = (FVec4){1, 1, 1, 1},
+                  });
+
+        plotter.canvas = canvas;
+        plt_draw(e, &plotter, &s->plot_renderer);
+
+        plt_cleanup(&plotter);
+
+        free(shell_points);
     }
 }
