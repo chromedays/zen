@@ -37,6 +37,7 @@ char* win32_load_text_file(const char* filename);
 void win32_print(const char* str);
 
 void win32_register_input(Input* input);
+void win32_pre_update_input();
 void win32_update_input(const Win32App* app);
 
 #endif // WIN32_H
