@@ -254,6 +254,7 @@ static void plt_draw(const Example* e, const Plotter* p, const PlotRenderer* r)
         }
     }
 
+    glBindVertexArray(r->lines_vao);
     glBindBuffer(GL_ARRAY_BUFFER, r->lines_vbo);
     glBufferData(GL_ARRAY_BUFFER, total_line_points_count * sizeof(FVec3), NULL,
                  GL_DYNAMIC_DRAW);
@@ -264,24 +265,19 @@ static void plt_draw(const Example* e, const Plotter* p, const PlotRenderer* r)
         {
             if (curr->type == PlotType_Lines)
             {
-                glBufferSubData(GL_ARRAY_BUFFER, offset,
+                glBufferSubData(GL_ARRAY_BUFFER, offset * sizeof(FVec3),
                                 curr->points_count * sizeof(FVec3),
                                 curr->points);
-                offset += curr->points_count * sizeof(FVec3);
+                ExamplePerObjectUBO per_object = {
+                    .model = mat4_identity(),
+                    .color = {curr->color.x, curr->color.y, curr->color.z},
+                };
+                e_apply_per_object_ubo(e, &per_object);
+                glDrawArrays(GL_LINE_STRIP, offset, curr->points_count);
+                offset += curr->points_count;
             }
             curr = curr->next;
         }
-    }
-
-    if (total_line_points_count > 0)
-    {
-        ExamplePerObjectUBO per_object = {
-            .model = mat4_identity(),
-            .color = (FVec3){1, 1, 1},
-        };
-        e_apply_per_object_ubo(e, &per_object);
-        glBindVertexArray(r->lines_vao);
-        glDrawArrays(GL_LINE_STRIP, 0, total_line_points_count);
     }
 
     {
@@ -577,10 +573,15 @@ static void render_graph(const Example* e,
                    .color = (FVec4){1, 0, 1, 1},
                    .thickness = s->control_point_radius,
                });
+
+    plt_lines(&plotter, s->control_points, s->control_points_count,
+              &(PlotAttribs){
+                  .color = (FVec4){1, 1, 0, 1},
+              });
+
     plt_lines(&plotter, values, values_count,
               &(PlotAttribs){
                   .color = (FVec4){1, 1, 1, 1},
-                  .thickness = 3,
               });
 
     plotter.canvas = canvas;
