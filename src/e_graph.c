@@ -754,6 +754,11 @@ EXAMPLE_UPDATE_FN_SIG(graph)
             draw_shell = !draw_shell;
         }
     }
+    static int div_count = 10;
+    if (method == 2)
+    {
+        igSliderInt("Division count", &div_count, 2, 5, "%d");
+    }
     glClearColor(0.1f, 0.1f, 0.1f, 1);
     glViewport(0, 0, input->window_size.x, input->window_size.y);
     glDisable(GL_SCISSOR_TEST);
@@ -769,9 +774,11 @@ EXAMPLE_UPDATE_FN_SIG(graph)
             coeffs_y[i] = s->control_points[i].y;
         }
 
-        int div_count = 2;
+#if 0
         int max_midpoints_count =
             (1 << (div_count - 1)) * (s->control_points_count - 1) + 1;
+#endif
+        int max_midpoints_count = 10000;
         int results_count = 0;
         float* results_x = malloc(max_midpoints_count * sizeof(float));
         float* results_y = malloc(max_midpoints_count * sizeof(float));
@@ -813,64 +820,65 @@ EXAMPLE_UPDATE_FN_SIG(graph)
                 results_y[results_count++] = s->control_points[i].y;
             }
 
+            int iteration_count = 1;
+
             // First iteration
+            for (int i = 0; i < div_count - 1; i++)
             {
                 memcpy(midpoints_x, results_x, results_count * sizeof(float));
                 memcpy(midpoints_y, results_y, results_count * sizeof(float));
                 midpoints_count = results_count;
-                calc_polynomial_nli(midpoints_x, midpoints_count, 0.5f);
-                int begin = 0;
-                int end = 0;
 
                 results_count = 0;
-                while (begin < s->control_points_count)
+                int results_offset = 0;
+                for (int j = 0; j < iteration_count; j++)
                 {
-                    results_x[results_count++] =
-                        begin == end ?
-                            midpoints_x[begin] :
-                            g_nli_values[begin * midpoints_count + end];
-                    if (end < s->control_points_count - 1)
-                        ++end;
-                    else
-                        ++begin;
-                }
-                calc_polynomial_nli(midpoints_y, midpoints_count, 0.5f);
-                begin = end = 0;
-                results_count = 0;
-                while (begin < s->control_points_count)
-                {
-                    results_y[results_count++] =
-                        begin == end ?
-                            midpoints_y[begin] :
-                            g_nli_values[begin * midpoints_count + end];
-                    if (end < s->control_points_count - 1)
-                        ++end;
-                    else
-                        ++begin;
-                }
-            }
-
-#if 0
-                int iteration_count = 2;
-
-                for (int i = 1; i < div_count; i++)
-                {
-                    for (int j = 0; j < iteration_count; j++)
+                    float* mx = midpoints_x + j * (s->control_points_count - 1);
+                    float* my = midpoints_y + j * (s->control_points_count - 1);
+                    calc_polynomial_nli(mx, s->control_points_count, 0.5f);
+                    int begin = 0;
+                    int end = 0;
+                    results_offset = results_count - 1;
+                    if (results_offset < 0)
+                        results_offset = 0;
+                    while (begin < s->control_points_count)
                     {
-                        for (int k = 0; k < s->control_points_count; k++)
-                        {
-                            int midpoints_begin = k + j * 2;
-                            ASSERT((midpoints_begin + s->control_points_count) <
-                                   midpoints_count);
-                            calc_polynomial_nli(midpoints_x + midpoints_begin,
-                                                s->control_points_count, 0.5f);
-                            calc_polynomial_nli(midpoints_y + midpoints_begin,
-                                                s->control_points_count, 0.5f);
-                        }
+                        results_x[results_offset++] =
+                            begin == end ?
+                                mx[begin] :
+                                g_nli_values[begin * s->control_points_count +
+                                             end];
+                        if (end < s->control_points_count - 1)
+                            ++end;
+                        else
+                            ++begin;
                     }
-                    iteration_count *= 2;
+
+                    calc_polynomial_nli(midpoints_y +
+                                            j * (s->control_points_count - 1),
+                                        s->control_points_count, 0.5f);
+                    begin = end = 0;
+                    results_offset = results_count - 1;
+                    if (results_offset < 0)
+                        results_offset = 0;
+                    while (begin < s->control_points_count)
+                    {
+                        results_y[results_offset++] =
+                            begin == end ?
+                                my[begin] :
+                                g_nli_values[begin * s->control_points_count +
+                                             end];
+                        if (end < s->control_points_count - 1)
+                            ++end;
+                        else
+                            ++begin;
+                    }
+
+                    results_count = results_offset;
                 }
-#endif
+
+                iteration_count *= 2;
+            }
 
             free(midpoints_x);
             free(midpoints_y);
@@ -966,11 +974,13 @@ EXAMPLE_UPDATE_FN_SIG(graph)
                 results[i].x = results_x[i];
                 results[i].y = results_y[i];
             }
+#if 0
             plt_points(&plotter, results, results_count,
                        &(PlotAttribs){
                            .color = (FVec4){1, 0, 0, 1},
                            .thickness = s->control_point_radius * 0.2f,
                        });
+#endif
             plt_lines(&plotter, results, results_count,
                       &(PlotAttribs){
                           .color = (FVec4){1, 0, 0, 1},
