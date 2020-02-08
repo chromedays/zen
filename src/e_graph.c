@@ -1,32 +1,13 @@
 #include "example.h"
 #include "resource.h"
 #include "app.h"
+#include "debug.h"
 #include <himath.h>
 #include <glad/glad.h>
 #include <stdlib.h>
 #include <math.h>
 #include <float.h>
 #include <string.h>
-
-#define MAX_DEGREE 20
-#define CURVE_POINTS_COUNT 100
-#define POINT_RADIUS 10.f
-
-#if 0
-    Plotter p;
-
-    begin(&p);
-    {
-        set_axis_attribs(&(AxisAttribs){
-            .x = { .name = "X", .scale = 10, },
-            .y = { .name = "Y", .scale = 10, },
-        });
-        lines(xs, ys, &(PlotAttribs){.color = 0xFFFFFFFF});
-        points(control_xs, control_ys, &(PlotAttribs){.color = 0xFF00FFFF});
-        enable_grid(true);
-    }
-    end(&p);
-#endif
 
 typedef enum PlotType_
 {
@@ -52,11 +33,17 @@ typedef struct Axis_
     float range_max;
 } Axis;
 
+typedef struct Canvas_
+{
+    IVec2 pos;
+    IVec2 size;
+} Canvas;
+
 typedef struct Plotter_
 {
     PointsBuffer* buffers;
     Axis axes[2];
-    IVec2 canvas_size;
+    Canvas canvas;
     bool should_draw_grid;
 } Plotter;
 
@@ -138,7 +125,10 @@ static void plt_init(Plotter* p)
                    },
            });
 
-    p->canvas_size = (IVec2){100, 100};
+    p->canvas = (Canvas){
+        .pos = {0, 0},
+        .size = {100, 100},
+    };
 }
 
 static void plt_cleanup(Plotter* p)
@@ -191,10 +181,14 @@ static void plt_renderer_cleanup(PlotRenderer* r)
 
 static void plt_draw(const Example* e, const Plotter* p, const PlotRenderer* r)
 {
+    // glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_CULL_FACE);
     glEnable(GL_SCISSOR_TEST);
-    glViewport(0, 0, p->canvas_size.x, p->canvas_size.y);
-    glScissor(0, 0, p->canvas_size.x, p->canvas_size.y);
-    glClearColor(0.1f, 0.1f, 0.1f, 1);
+    glViewport(p->canvas.pos.x, p->canvas.pos.y, p->canvas.size.x,
+               p->canvas.size.y);
+    glScissor(p->canvas.pos.x, p->canvas.pos.y, p->canvas.size.x,
+              p->canvas.size.y);
+    glClearColor(0.5f, 0.1f, 0.5f, 1);
     glClear(GL_COLOR_BUFFER_BIT);
     glDisable(GL_DEPTH_TEST);
     glUseProgram(r->unlit_shader);
@@ -211,10 +205,13 @@ static void plt_draw(const Example* e, const Plotter* p, const PlotRenderer* r)
         p->axes[1].range_max,
     };
 
-    FVec2 canvas_min = {0};
+    FVec2 canvas_min = {
+        (float)p->canvas.pos.x,
+        (float)p->canvas.pos.y,
+    };
     FVec2 canvas_max = {
-        (float)p->canvas_size.x,
-        (float)p->canvas_size.y,
+        (float)(p->canvas.pos.x + p->canvas.size.x),
+        (float)(p->canvas.pos.y + p->canvas.size.y),
     };
     Mat4 graph_to_canvas = mat4_identity();
     graph_to_canvas.mm[0][0] =
@@ -228,15 +225,20 @@ static void plt_draw(const Example* e, const Plotter* p, const PlotRenderer* r)
         (graph_max.y * canvas_min.y - canvas_max.y * graph_min.y) /
         (graph_max.y - graph_min.y);
 
-#if 0
-    per_frame.proj =
-        mat4_ortho(p->axes[0].range_max, p->axes[0].range_min,
-                   p->axes[1].range_max, p->axes[1].range_min, 0.1f, 100);
-#else
+#if 1
     per_frame.proj = mat4_ortho(canvas_max.x, canvas_min.x, canvas_max.y,
                                 canvas_min.y, 0.1f, 100);
-    per_frame.proj = mat4_mul(&per_frame.proj, &graph_to_canvas);
+#else
+#if 0
+    per_frame.proj = mat4_ortho((float)p->canvas.size.x, 0,
+                                (float)p->canvas.size.y, 0, 0.1f, 100);
+#else
+    per_frame.proj = mat4_ortho((float)p->screen_size.x, 0,
+                                (float)p->screen_size.y, 0, 0.1f, 100);
 #endif
+
+#endif
+    per_frame.proj = mat4_mul(&per_frame.proj, &graph_to_canvas);
     e_apply_per_frame_ubo(e, &per_frame);
 
     int total_line_points_count = 0;
@@ -271,8 +273,11 @@ static void plt_draw(const Example* e, const Plotter* p, const PlotRenderer* r)
         }
     }
 
-    glBindVertexArray(r->lines_vao);
-    glDrawArrays(GL_LINE_STRIP, 0, total_line_points_count);
+    if (total_line_points_count > 0)
+    {
+        glBindVertexArray(r->lines_vao);
+        glDrawArrays(GL_LINE_STRIP, 0, total_line_points_count);
+    }
 
     {
         FVec2 graph_size = {
@@ -292,9 +297,9 @@ static void plt_draw(const Example* e, const Plotter* p, const PlotRenderer* r)
                     Mat4 trans = mat4_translation(*point);
                     Mat4 scale = mat4_scalev((FVec3){
                         curr->thickness * graph_size.x /
-                            (float)p->canvas_size.x,
+                            (float)p->canvas.size.x,
                         curr->thickness * graph_size.y /
-                            (float)p->canvas_size.y,
+                            (float)p->canvas.size.y,
                         1,
                     });
                     per_object.model = mat4_mul(&trans, &scale);
@@ -320,42 +325,26 @@ typedef struct Method_
     float (*call)(Graph*, float);
 } Method;
 
+#define MAX_CONTROL_POINTS_COUNT 20
+
 typedef struct Graph_
 {
-    Mesh point_mesh;
-    VertexBuffer point_vb;
-
-    Mesh canvas_mesh;
-    VertexBuffer canvas_vb;
-
-    FVec3 curve_points[CURVE_POINTS_COUNT];
-    uint curve_vao;
-    uint curve_vbo;
-
-    GLuint unlit_shader;
+    FVec3 control_points[MAX_CONTROL_POINTS_COUNT];
+    int control_points_count;
 
     FVec2 graph_min;
     FVec2 graph_max;
 
-    FVec2 world_min;
-    FVec2 world_max;
-
-    float coeffs[MAX_DEGREE + 1];
-    int degree;
-
-    Method methods[2];
-    int current_method_index;
-
-    int dragged_point_index;
-    bool is_dragging;
-
     PlotRenderer plot_renderer;
 } Graph;
 
-static int g_combs[MAX_DEGREE + 1][MAX_DEGREE + 1];
+#define MAX_COMB_N 30
+static int g_combs[MAX_COMB_N][MAX_COMB_N];
 
 static int comb(int n, int c)
 {
+    ASSERT(n >= 0 && n < MAX_COMB_N && c >= 0 && c < MAX_COMB_N);
+
     if (c == 0 || c == n)
         return 1;
     if (g_combs[n][c] != 0)
@@ -364,6 +353,7 @@ static int comb(int n, int c)
     return g_combs[n][c];
 }
 
+#if 0
 static float calc_polynomial_bb(Graph* s, float t)
 {
     float result = 0;
@@ -499,54 +489,21 @@ static int get_point_index_colliding_mouse(const Graph* s, const Input* input)
 
     return index;
 }
+#endif
 
 EXAMPLE_INIT_FN_SIG(graph)
 {
     Example* e = e_example_make("graph", Graph);
     Graph* s = (Graph*)e->scene;
 
-    s->point_mesh = rc_mesh_make_sphere(0.5f, 32, 32);
-    r_vb_init(&s->point_vb, &s->point_mesh, GL_TRIANGLES);
-
+    s->graph_min = (FVec2){0, 0};
+    s->graph_max = (FVec2){5, 4};
+    for (int i = 0; i < 3; i++)
     {
-        Vertex canvas_vertices[4] = {
-            {{0, 0, 0}},
-            {{1, 0, 0}},
-            {{1, 1, 0}},
-            {{0, 1, 0}},
-        };
-        uint canvas_indices[6] = {0, 1, 2, 2, 3, 0};
-
-        s->canvas_mesh = rc_mesh_make_raw2(ARRAY_LENGTH(canvas_vertices),
-                                           ARRAY_LENGTH(canvas_indices),
-                                           canvas_vertices, canvas_indices);
+        s->control_points[i].x = (float)i + 1;
+        s->control_points[i].y = (float)i + 1;
+        s->control_points_count++;
     }
-    r_vb_init(&s->canvas_vb, &s->canvas_mesh, GL_TRIANGLES);
-
-    glGenVertexArrays(1, &s->curve_vao);
-    glBindVertexArray(s->curve_vao);
-    glGenBuffers(1, &s->curve_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, s->curve_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(s->curve_points), NULL,
-                 GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(FVec3), (GLvoid*)0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    s->unlit_shader = e_shader_load(e, "unlit");
-
-    s->graph_min = (FVec2){0, -3};
-    s->graph_max = (FVec2){1, 3};
-
-    set_world_bound(s, input);
-
-    s->degree = 1;
-
-    s->methods[0] = (Method){"BB-form", &calc_polynomial_bb};
-    s->methods[1] = (Method){"NLI", &calc_polynomial_nli};
-
-    s->dragged_point_index = -1;
 
     plt_renderer_init(e, &s->plot_renderer);
 
@@ -560,13 +517,6 @@ EXAMPLE_CLEANUP_FN_SIG(graph)
 
     plt_renderer_cleanup(&s->plot_renderer);
 
-    glDeleteProgram(s->unlit_shader);
-    glDeleteBuffers(1, &s->curve_vbo);
-    glDeleteVertexArrays(1, &s->curve_vao);
-    r_vb_cleanup(&s->canvas_vb);
-    rc_mesh_cleanup(&s->canvas_mesh);
-    r_vb_cleanup(&s->point_vb);
-    rc_mesh_cleanup(&s->point_mesh);
     e_example_destroy(e);
 }
 
@@ -575,6 +525,7 @@ EXAMPLE_UPDATE_FN_SIG(graph)
     Example* e = (Example*)udata;
     Graph* s = (Graph*)e->scene;
 
+#if 0
     set_world_bound(s, input);
 
     if (!s->is_dragging && input->mouse_down[0])
@@ -659,6 +610,7 @@ EXAMPLE_UPDATE_FN_SIG(graph)
         igText("1");
         igEnd();
     }
+#endif
 
 #if 0
     ExamplePerFrameUBO per_frame = {0};
@@ -747,35 +699,29 @@ EXAMPLE_UPDATE_FN_SIG(graph)
                                                    }},
                                    });
 
-    for (int i = 0; i < ARRAY_LENGTH(s->curve_points); i++)
-    {
-        float step_x = 1.f / (ARRAY_LENGTH(s->curve_points) - 1);
-        float t = (float)i * step_x;
-        float p = s->methods[s->current_method_index].call(s, t);
+    plt_set_axis_attribs(&plotter, &(AxisAttribs){
+                                       .attribs =
+                                           {
+                                               {.name = "X",
+                                                .range_min = s->graph_min.x,
+                                                .range_max = s->graph_max.x},
+                                               {.name = "Y",
+                                                .range_min = s->graph_min.y,
+                                                .range_max = s->graph_max.y},
+                                           },
+                                   });
 
-        FVec2 gp = {0};
-        gp.x = t;
-        gp.y = p;
-        // FVec2 wp = graph_to_world(s, gp);
-        s->curve_points[i] = (FVec3){gp.x, gp.y, 0};
-    }
-
-    plt_set_axis_attribs(
-        &plotter, &(AxisAttribs){
-                      .attribs =
-                          {
-                              {.name = "X", .range_min = 0, .range_max = 1},
-                              {.name = "Y", .range_min = -3, .range_max = 3},
-                          },
-                  });
-
-    plt_points(&plotter, s->curve_points, ARRAY_LENGTH(s->curve_points),
+    plt_points(&plotter, s->control_points, s->control_points_count,
                &(PlotAttribs){
                    .color = (FVec4){1, 0, 1, 1},
-                   .thickness = 10,
+                   .thickness = 20,
                });
-
-    plotter.canvas_size = input->window_size;
+    const IVec2 canvas_size = {500, 400};
+    plotter.canvas = (Canvas){
+        .pos = {input->window_size.x - 50 - canvas_size.x,
+                input->window_size.y - 50 - canvas_size.y},
+        .size = canvas_size,
+    };
     plt_draw(e, &plotter, &s->plot_renderer);
 
     plt_cleanup(&plotter);
