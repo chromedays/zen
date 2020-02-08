@@ -318,14 +318,6 @@ static void plt_draw(const Example* e, const Plotter* p, const PlotRenderer* r)
     }
 }
 
-typedef struct Graph_ Graph;
-
-typedef struct Method_
-{
-    const char* name;
-    float (*call)(Graph*, float);
-} Method;
-
 typedef struct ControlState_
 {
     int dragging_control_point_index;
@@ -347,34 +339,7 @@ typedef struct Graph_
     PlotRenderer plot_renderer;
 } Graph;
 
-#define MAX_COMB_N 30
-static int g_combs[MAX_COMB_N][MAX_COMB_N];
-
-static int comb(int n, int c)
-{
-    ASSERT(n >= 0 && n < MAX_COMB_N && c >= 0 && c < MAX_COMB_N);
-
-    if (c == 0 || c == n)
-        return 1;
-    if (g_combs[n][c] != 0)
-        return g_combs[n][c];
-    g_combs[n][c] = comb(n - 1, c - 1) + comb(n - 1, c);
-    return g_combs[n][c];
-}
-
 #if 0
-static float calc_polynomial_bb(Graph* s, float t)
-{
-    float result = 0;
-    int d = s->degree;
-    for (int i = 0; i <= d; i++)
-    {
-        result += s->coeffs[i] * (float)comb(d, i) *
-                  powf(1.f - t, (float)(d - i)) * powf(t, (float)i);
-    }
-
-    return result;
-}
 
 static float
     calc_polynomial_nli_rec(const Graph* s,
@@ -713,6 +678,33 @@ static float calc_polynomial_nli(float* coeffs, int coeffs_count, float t)
                                    coeffs_count - 1, t);
 }
 
+#define MAX_COMB_N MAX_CONTROL_POINTS_COUNT
+static int g_combs[MAX_COMB_N][MAX_COMB_N];
+
+static int comb(int n, int c)
+{
+    ASSERT(n >= 0 && n < MAX_COMB_N && c >= 0 && c < MAX_COMB_N);
+
+    if (c == 0 || c == n)
+        return 1;
+    if (g_combs[n][c] != 0)
+        return g_combs[n][c];
+    g_combs[n][c] = comb(n - 1, c - 1) + comb(n - 1, c);
+    return g_combs[n][c];
+}
+static float calc_polynomial_bb(const float* coeffs, int coeffs_count, float t)
+{
+    float result = 0;
+    for (int i = 0; i < coeffs_count; i++)
+    {
+        result += coeffs[i] * (float)comb(coeffs_count - 1, i) *
+                  powf(1.f - t, (float)(coeffs_count - 1 - i)) *
+                  powf(t, (float)i);
+    }
+
+    return result;
+}
+
 EXAMPLE_UPDATE_FN_SIG(graph)
 {
     Example* e = (Example*)udata;
@@ -786,10 +778,16 @@ EXAMPLE_UPDATE_FN_SIG(graph)
                 coeffs_x[i] = s->control_points[i].x;
                 coeffs_y[i] = s->control_points[i].y;
             }
+#if 0
             values[t].x = calc_polynomial_nli(coeffs_x, s->control_points_count,
                                               (float)t / 100.f);
             values[t].y = calc_polynomial_nli(coeffs_y, s->control_points_count,
                                               (float)t / 100.f);
+#endif
+            values[t].x = calc_polynomial_bb(coeffs_x, s->control_points_count,
+                                             (float)t / 100.f);
+            values[t].y = calc_polynomial_bb(coeffs_y, s->control_points_count,
+                                             (float)t / 100.f);
         }
         render_graph(e, s, canvas, values, 100);
 
