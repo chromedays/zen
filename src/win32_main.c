@@ -65,6 +65,8 @@ int CALLBACK WinMain(HINSTANCE instance,
                    (float)freq.QuadPart;
         last_counter = curr_counter;
 
+        win32_pre_update_input();
+
         MSG msg = {0};
         while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
         {

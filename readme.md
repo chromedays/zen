@@ -15,3 +15,8 @@ Implemented in cs300_350 branch
 ## Bernstein Polynomial Sum
 Implemented in curve_graph branch
 ![Bernstein](screenshots/bernstein.png)
+
+## Connected Component Labeling
+Implemented in image_processing branch
+![CCL](screenshots/ccl.png)
+![CCL2](screenshots/ccl2.png)
