@@ -155,7 +155,7 @@ static void update_light_colors(CS300* s)
 
 EXAMPLE_INIT_FN_SIG(cs300)
 {
-    Example* e = e_example_make("cs300", sizeof(CS300));
+    Example* e = e_example_make("cs300", CS300);
     CS300* s = (CS300*)e->scene;
 
     Path model_root_path = fs_path_make_working_dir();
