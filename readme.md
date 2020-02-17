@@ -6,7 +6,9 @@ premake5 vs2019
 ```
 - Open generated .sln file
 
-# Screenshots
+Camera Control
+- WASD to move
+- Move mouse while pressing right-click button
 
 ## Deferred Rendering
 Implemented in cs300_350 branch

@@ -102,4 +102,6 @@ EXAMPLE_DECL(hdr);
 EXAMPLE_DECL(image_processing);
 EXAMPLE_DECL(graph);
 
+EXAMPLE_DECL(cs300);
+
 #endif // EXAMPLE_H
