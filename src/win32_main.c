@@ -49,7 +49,7 @@ int CALLBACK WinMain(HINSTANCE instance,
 
     Scene scene = {0};
     s_init(&scene, &input);
-    s_switch_scene(&scene, EXAMPLE_LITERAL(graph));
+    s_switch_scene(&scene, EXAMPLE_LITERAL(image_processing));
 
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);

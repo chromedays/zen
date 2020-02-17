@@ -99,6 +99,7 @@ EXAMPLE_DECL(phong);
 EXAMPLE_DECL(simple_lights);
 EXAMPLE_DECL(normal_mapping);
 EXAMPLE_DECL(hdr);
+EXAMPLE_DECL(image_processing);
 EXAMPLE_DECL(graph);
 
 #endif // EXAMPLE_H
