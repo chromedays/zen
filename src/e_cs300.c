@@ -508,3 +508,14 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
         copy_depth_buffer(s, input->window_size);
     draw_debug_objects(e, s);
 }
+
+#define USER_INIT                                                              \
+    Scene scene = {0};                                                         \
+    s_init(&scene, &input);                                                    \
+    s_switch_scene(&scene, EXAMPLE_LITERAL(cs300));
+
+#define USER_UPDATE s_update(&scene);
+
+#define USER_CLEANUP s_cleanup(&scene);
+
+#include "win32_main.inl"

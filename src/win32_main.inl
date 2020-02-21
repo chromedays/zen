@@ -6,8 +6,6 @@
 #include "app.h"
 #include "example.h"
 #include <himath.h>
-#include <math.h>
-#include <stdlib.h>
 
 typedef struct Win32GlobalState_
 {
@@ -47,9 +45,13 @@ int CALLBACK WinMain(HINSTANCE instance,
     win32_register_input(&input);
     win32_update_input(&app);
 
-    Scene scene = {0};
-    s_init(&scene, &input);
-    s_switch_scene(&scene, EXAMPLE_LITERAL(cs300));
+    // Scene scene = {0};
+    // s_init(&scene, &input);
+    // s_switch_scene(&scene, EXAMPLE_LITERAL(cs300));
+
+#ifdef USER_INIT
+    USER_INIT
+#endif
 
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
@@ -84,14 +86,20 @@ int CALLBACK WinMain(HINSTANCE instance,
 
         r_gui_new_frame(&input);
 
-        s_update(&scene);
+#ifdef USER_UPDATE
+        USER_UPDATE
+#endif
+        // s_update(&scene);
 
         r_gui_render();
 
         SwapBuffers(app.dc);
     }
 
-    s_cleanup(&scene);
+// s_cleanup(&scene);
+#ifdef USER_CLEANUP
+    USER_CLEANUP
+#endif
 
     r_gui_cleanup();
 
