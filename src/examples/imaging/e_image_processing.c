@@ -1,9 +1,9 @@
-#include "example.h"
-#include "debug.h"
-#include "filesystem.h"
-#include "resource.h"
-#include "renderer.h"
-#include "app.h"
+#include "../../example.h"
+#include "../../debug.h"
+#include "../../filesystem.h"
+#include "../../resource.h"
+#include "../../renderer.h"
+#include "../../app.h"
 #include <stdlib.h>
 #include <math.h>
 

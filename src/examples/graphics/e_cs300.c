@@ -1,9 +1,9 @@
-#include "example.h"
-#include "resource.h"
-#include "filesystem.h"
-#include "debug.h"
-#include "util.h"
-#include "app.h"
+#include "../../example.h"
+#include "../../resource.h"
+#include "../../filesystem.h"
+#include "../../debug.h"
+#include "../../util.h"
+#include "../../app.h"
 #include <histr.h>
 #include <stdlib.h>
 #include <math.h>
@@ -518,4 +518,4 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
 
 #define USER_CLEANUP s_cleanup(&scene);
 
-#include "win32_main.inl"
+#include "../../win32_main.inl"

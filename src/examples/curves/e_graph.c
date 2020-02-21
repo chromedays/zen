@@ -1,7 +1,7 @@
-#include "example.h"
-#include "resource.h"
-#include "app.h"
-#include "debug.h"
+#include "../../example.h"
+#include "../../resource.h"
+#include "../../app.h"
+#include "../../debug.h"
 #include <himath.h>
 #include <glad/gl.h>
 #include <stdlib.h>
