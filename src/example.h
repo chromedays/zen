@@ -93,15 +93,8 @@ typedef struct ExampleFpsCamera_
 void e_fpscam_update(ExampleFpsCamera* cam, const Input* input, float speed);
 FVec3 e_fpscam_get_look(const ExampleFpsCamera* cam);
 
-EXAMPLE_DECL(hello_triangle);
-EXAMPLE_DECL(hello_mesh);
-EXAMPLE_DECL(phong);
-EXAMPLE_DECL(simple_lights);
-EXAMPLE_DECL(normal_mapping);
-EXAMPLE_DECL(hdr);
 EXAMPLE_DECL(image_processing);
 EXAMPLE_DECL(graph);
-
 EXAMPLE_DECL(cs300);
 
 #endif // EXAMPLE_H
