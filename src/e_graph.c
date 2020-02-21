@@ -3,7 +3,7 @@
 #include "app.h"
 #include "debug.h"
 #include <himath.h>
-#include <glad/glad.h>
+#include <glad/gl.h>
 #include <stdlib.h>
 #include <math.h>
 #include <float.h>

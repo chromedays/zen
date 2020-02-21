@@ -3,7 +3,7 @@
 
 #include "primitive.h"
 #include "renderer.h"
-#include <glad/glad.h>
+#include <glad/gl.h>
 #include <himath.h>
 
 #define SHADER_LOAD_DESC_MAX_FILES_COUNT 10

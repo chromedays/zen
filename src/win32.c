@@ -3,12 +3,10 @@
 #include "primitive.h"
 #include "debug.h"
 #include "util.h"
-#include <glad/glad_wgl.h>
+#include <glad/wgl.h>
 #include <himath.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-// TODO: abstract input handling code
 
 static HMODULE g_opengl;
 static Input* g_input;
@@ -309,8 +307,7 @@ static HGLRC win32_gl_context_make(HDC dc,
                              WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
                              0};
 
-    ASSERT(gladLoadWGLLoader((GLADloadproc)&win32_gl_get_proc, dc));
-    ASSERT(gladLoadWGL(dc));
+    ASSERT(gladLoadWGL(dc, (GLADloadfunc)&win32_gl_get_proc));
 
     wglMakeCurrent(NULL, NULL);
     wglDeleteContext(rc_dummy);
@@ -328,8 +325,7 @@ static HGLRC win32_gl_context_make(HDC dc,
 
     wglMakeCurrent(dc, rc);
 
-    ASSERT(gladLoadGLLoader((GLADloadproc)&win32_gl_get_proc));
-    ASSERT(gladLoadGL());
+    ASSERT(gladLoadGL((GLADloadfunc)&win32_gl_get_proc));
 
     return rc;
 }

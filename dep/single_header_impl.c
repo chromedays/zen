@@ -13,3 +13,9 @@
 #include <cgltf.h>
 #define TINYOBJ_LOADER_C_IMPLEMENTATION
 #include <tinyobj_loader_c.h>
+#ifdef _WIN32
+#define GLAD_WGL_IMPLEMENTATION
+#include <glad/wgl.h>
+#endif //_WIN32
+#define GLAD_GL_IMPLEMENTATION
+#include <glad/gl.h>

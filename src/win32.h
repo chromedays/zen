@@ -2,7 +2,7 @@
 #define WIN32_H
 #include "primitive.h"
 #include <himath.h>
-#include <glad/glad_wgl.h>
+#include <glad/wgl.h>
 
 typedef struct Input_ Input;
 
