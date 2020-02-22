@@ -668,6 +668,52 @@ static float calc_polynomial_bb(const float* coeffs, int coeffs_count, float t)
     return result;
 }
 
+static void calc_polynomial_newton(const FVec3* input_points,
+                                   int input_points_count,
+                                   FVec3* out_points,
+                                   int out_points_count)
+{
+    FVec3* temps = (FVec3*)malloc(input_points_count * sizeof(FVec3));
+    memcpy(temps, input_points, input_points_count * sizeof(FVec3));
+    FVec3* coeffs = (FVec3*)malloc(input_points_count * sizeof(FVec3));
+    coeffs[0] = input_points[0];
+    int coeffs_count = 1;
+
+    for (int i = 1; i < input_points_count; i++)
+    {
+        for (int j = 0; j < input_points_count - i; j++)
+        {
+            temps[j] = fvec3_div(fvec3_sub(temps[j + 1], temps[j]),
+                                 (FVec3){(float)i, (float)i, 1});
+        }
+
+        coeffs[coeffs_count++] = temps[0];
+    }
+
+    ASSERT(coeffs_count == input_points_count);
+
+    for (int i = 0; i < out_points_count; i++)
+    {
+        float t = ((float)i / (float)(out_points_count - 1)) *
+                  (float)(input_points_count - 1);
+
+        FVec3 basis = (FVec3){1, 1};
+
+        out_points[i] = coeffs[0];
+        for (int j = 1; j < input_points_count; j++)
+        {
+            basis = fvec3_mul(
+                basis, fvec3_sub((FVec3){t, t},
+                                 (FVec3){(float)(j - 1), (float)(j - 1)}));
+            out_points[i] =
+                fvec3_add(out_points[i], fvec3_mul(coeffs[j], basis));
+        }
+    }
+
+    free(coeffs);
+    free(temps);
+}
+
 EXAMPLE_UPDATE_FN_SIG(graph)
 {
     Example* e = (Example*)udata;
@@ -730,22 +776,26 @@ EXAMPLE_UPDATE_FN_SIG(graph)
             HIMATH_CLAMP(mouse_pos_graph.y, s->graph_min.y, s->graph_max.y);
     }
 
-    const char* method_names[3] = {
+    const char* method_names[4] = {
         "NLI",
         "BB form",
         "Midpoint Subdivision",
+        "Newton Form",
     };
-    static int method = 0;
+    static int method = 3;
 
+#if 0
     for (int i = 0; i < 3; i++)
     {
         if (igButton(method_names[i], (ImVec2){0}))
             method = i;
     }
     igText("Current: %s", method_names[method]);
+#endif
 
     static float shell_t = 0.5f;
     static bool draw_shell = true;
+#if 0
     if (method == 0)
     {
         igSliderFloat("Shell T", &shell_t, 0, 1, "%.3f", 1);
@@ -754,13 +804,9 @@ EXAMPLE_UPDATE_FN_SIG(graph)
             draw_shell = !draw_shell;
         }
     }
-    static int div_count = 10;
-#if 0
-    if (method == 2)
-    {
-        igSliderInt("Division count", &div_count, 2, 5, "%d");
-    }
 #endif
+
+    static int div_count = 10;
     glClearColor(0.1f, 0.1f, 0.1f, 1);
     glViewport(0, 0, input->window_size.x, input->window_size.y);
     glDisable(GL_SCISSOR_TEST);
@@ -769,17 +815,13 @@ EXAMPLE_UPDATE_FN_SIG(graph)
     {
         float* coeffs_x = malloc(s->control_points_count * sizeof(float));
         float* coeffs_y = malloc(s->control_points_count * sizeof(float));
-        FVec3 values[100] = {0};
+        FVec3 values[500] = {0};
         for (int i = 0; i < s->control_points_count; i++)
         {
             coeffs_x[i] = s->control_points[i].x;
             coeffs_y[i] = s->control_points[i].y;
         }
 
-#if 0
-        int max_midpoints_count =
-            (1 << (div_count - 1)) * (s->control_points_count - 1) + 1;
-#endif
         int max_midpoints_count = 10000;
         int results_count = 0;
         float* results_x = malloc(max_midpoints_count * sizeof(float));
@@ -926,6 +968,13 @@ EXAMPLE_UPDATE_FN_SIG(graph)
         free(coeffs_x);
         free(coeffs_y);
 
+        calc_polynomial_newton(s->control_points, s->control_points_count,
+                               values, ARRAY_LENGTH(values));
+        for (int i = 0; i < ARRAY_LENGTH(values); i++)
+        {
+            values[i].z = 0;
+        }
+
         Plotter plotter;
         plt_init(&plotter);
         plt_set_axis_attribs(&plotter, &(AxisAttribs){
@@ -976,13 +1025,6 @@ EXAMPLE_UPDATE_FN_SIG(graph)
                 results[i].x = results_x[i];
                 results[i].y = results_y[i];
             }
-#if 0
-            plt_points(&plotter, results, results_count,
-                       &(PlotAttribs){
-                           .color = (FVec4){1, 0, 0, 1},
-                           .thickness = s->control_point_radius * 0.2f,
-                       });
-#endif
             plt_lines(&plotter, results, results_count,
                       &(PlotAttribs){
                           .color = (FVec4){1, 0, 0, 1},
@@ -1000,10 +1042,12 @@ EXAMPLE_UPDATE_FN_SIG(graph)
                        .thickness = s->control_point_radius,
                    });
 
+#if 0
         plt_lines(&plotter, s->control_points, s->control_points_count,
                   &(PlotAttribs){
                       .color = (FVec4){1, 1, 0, 1},
                   });
+#endif
 
         plt_lines(&plotter, values, ARRAY_LENGTH(values),
                   &(PlotAttribs){
@@ -1018,3 +1062,14 @@ EXAMPLE_UPDATE_FN_SIG(graph)
         free(shell_points);
     }
 }
+
+#define USER_INIT                                                              \
+    Scene scene = {0};                                                         \
+    s_init(&scene, &input);                                                    \
+    s_switch_scene(&scene, EXAMPLE_LITERAL(graph));
+
+#define USER_UPDATE s_update(&scene);
+
+#define USER_CLEANUP s_cleanup(&scene);
+
+#include "../../win32_main.inl"
