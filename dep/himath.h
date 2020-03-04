@@ -104,6 +104,18 @@ typedef struct FVec4_
     float x, y, z, w;
 } FVec4;
 
+HIMATH_ATTRIB FVec4 fvec4_negate(FVec4 v);
+HIMATH_ATTRIB FVec4 fvec4_add(FVec4 a, FVec4 b);
+HIMATH_ATTRIB FVec4 fvec4_sub(FVec4 a, FVec4 b);
+HIMATH_ATTRIB FVec4 fvec4_mul(FVec4 a, FVec4 b);
+HIMATH_ATTRIB FVec4 fvec4_div(FVec4 a, FVec4 b);
+HIMATH_ATTRIB FVec4 fvec4_mulf(FVec4 v, float s);
+HIMATH_ATTRIB FVec4 fvec4_divf(FVec4 v, float s);
+HIMATH_ATTRIB float fvec4_dot(FVec4 a, FVec4 b);
+HIMATH_ATTRIB float fvec4_length_sq(FVec4 v);
+HIMATH_ATTRIB float fvec4_length(FVec4 v);
+HIMATH_ATTRIB FVec4 fvec4_normalize(FVec4 v);
+
 typedef union Mat4_
 {
     float m[16];
@@ -427,6 +439,62 @@ HIMATH_ATTRIB float fvec3_length(FVec3 v)
 HIMATH_ATTRIB FVec3 fvec3_normalize(FVec3 v)
 {
     FVec3 result = fvec3_divf(v, fvec3_length(v));
+    return result;
+}
+
+HIMATH_ATTRIB FVec4 fvec4_negate(FVec4 v)
+{
+    FVec4 result = {-v.x, -v.y, -v.z, -v.w};
+    return result;
+}
+HIMATH_ATTRIB FVec4 fvec4_add(FVec4 a, FVec4 b)
+{
+    FVec4 result = {a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w};
+    return result;
+}
+HIMATH_ATTRIB FVec4 fvec4_sub(FVec4 a, FVec4 b)
+{
+    FVec4 result = {a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w};
+    return result;
+}
+HIMATH_ATTRIB FVec4 fvec4_mul(FVec4 a, FVec4 b)
+{
+    FVec4 result = {a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w};
+    return result;
+}
+HIMATH_ATTRIB FVec4 fvec4_div(FVec4 a, FVec4 b)
+{
+    FVec4 result = {a.x / b.x, a.y / b.y, a.z / b.z, a.w / b.w};
+    return result;
+}
+HIMATH_ATTRIB FVec4 fvec4_mulf(FVec4 v, float s)
+{
+    FVec4 result = {v.x * s, v.y * s, v.z * s, v.w * s};
+    return result;
+}
+HIMATH_ATTRIB FVec4 fvec4_divf(FVec4 v, float s)
+{
+    FVec4 result = {v.x / s, v.y / s, v.z / s, v.w / s};
+    return result;
+}
+HIMATH_ATTRIB float fvec4_dot(FVec4 a, FVec4 b)
+{
+    float result = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+    return result;
+}
+HIMATH_ATTRIB float fvec4_length_sq(FVec4 v)
+{
+    float result = fvec4_dot(v, v);
+    return result;
+}
+HIMATH_ATTRIB float fvec4_length(FVec4 v)
+{
+    float result = sqrtf(fvec4_length_sq(v));
+    return result;
+}
+HIMATH_ATTRIB FVec4 fvec4_normalize(FVec4 v)
+{
+    FVec4 result = fvec4_divf(v, fvec4_length(v));
     return result;
 }
 
