@@ -1072,4 +1072,4 @@ EXAMPLE_UPDATE_FN_SIG(graph)
 
 #define USER_CLEANUP s_cleanup(&scene);
 
-#include "../../win32_main.inl"
+//#include "../../win32_main.inl"

@@ -4,7 +4,9 @@
 #include "../../resource.h"
 #include "../../renderer.h"
 #include "../../app.h"
+#include <string.h>
 #include <stdlib.h>
+#include <float.h>
 #include <math.h>
 
 typedef struct Pixel_
@@ -19,9 +21,12 @@ typedef struct Image_
     int max_color;
     Pixel* pixels;
     uint texture;
+
+    int* histogram;
 } Image;
 
 static void image_update_gl_texture(Image* image);
+static void image_update_histogram(Image* image);
 
 static void image_init(Image* image, int w, int h, int max_color)
 {
@@ -34,6 +39,7 @@ static void image_init(Image* image, int w, int h, int max_color)
 
     glGenTextures(1, &image->texture);
     image_update_gl_texture(image);
+    image_update_histogram(image);
 }
 
 static Image image_load_from_ppm(const char* filename)
@@ -87,6 +93,7 @@ static Image image_load_from_ppm(const char* filename)
         result.pixels = pixels;
         result.texture = texture;
         image_update_gl_texture(&result);
+        image_update_histogram(&result);
     }
 
     return result;
@@ -98,6 +105,8 @@ static void image_cleanup(Image* image)
         free(image->pixels);
     if (image->texture)
         glDeleteTextures(1, &image->texture);
+    if (image->histogram)
+        free(image->histogram);
 
     *image = (Image){0};
 }
@@ -114,6 +123,24 @@ static void image_update_gl_texture(Image* image)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, image->w, image->h, 0, GL_RGBA,
                  GL_FLOAT, image->pixels);
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+static void image_update_histogram(Image* image)
+{
+    if (image->histogram)
+        free(image->histogram);
+
+    image->histogram =
+        (int*)malloc((image->max_color + 1) * sizeof(*image->histogram));
+    memset(image->histogram, 0,
+           (image->max_color + 1) * sizeof(*image->histogram));
+
+    for (int i = 0; i < image->w * image->h; i++)
+    {
+        int intensity =
+            (int)floorf(image->pixels[i].r * (float)image->max_color);
+        ++image->histogram[intensity];
+    }
 }
 
 static void image_write_to_file(Image* image)
@@ -171,6 +198,12 @@ static Pixel image_sample_nearest(const Image* image, FVec2 fuv)
 
     Pixel result = image_get_pixel_val(image, uv);
     return result;
+}
+
+static float image_imgui_histogram_get_value(void* data, int index)
+{
+    Image* image = (Image*)data;
+    return (float)image->histogram[index];
 }
 
 typedef enum ImageOperationType_
@@ -296,6 +329,7 @@ IMAGE_OPERATION_FN_DECL(image_operation_binary)
     }
 
     image_update_gl_texture(&result);
+    image_update_histogram(&result);
 
     return result;
 }
@@ -372,6 +406,7 @@ IMAGE_OPERATION_FN_DECL(image_operation_unary)
     }
 
     image_update_gl_texture(&result);
+    image_update_histogram(&result);
 
     return result;
 }
@@ -502,6 +537,7 @@ IMAGE_OPERATION_FN_DECL(image_operation_ccl)
         result.pixels[i] = *label_color;
     }
     image_update_gl_texture(&result);
+    image_update_histogram(&result);
 
     free(label_colors);
     free(labels);
@@ -556,6 +592,8 @@ static FILE_FOREACH_FN_DECL(append_filepath)
 
 EXAMPLE_INIT_FN_SIG(image_processing)
 {
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+
     Example* e = e_example_make("image_processing", ImageProcessing);
     ImageProcessing* s = (ImageProcessing*)e->scene;
 
@@ -662,17 +700,21 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
             (s->current_image_filepath_index < 0))
         {
             igText("Select Target Image");
-            igSeparator();
-            for (int i = 0; i < s->image_filepaths_count; i++)
+            if (igBeginCombo("##Select Target Image", "Select..", 0))
             {
-                if (igSelectable(s->image_filepaths[i].filename,
-                                 s->current_image_filepath_index == i,
-                                 ImGuiSelectableFlags_None, (ImVec2){0}))
+                for (int i = 0; i < s->image_filepaths_count; i++)
                 {
-                    s->current_image =
-                        image_load_from_ppm(s->image_filepaths[i].abs_path_str);
-                    s->current_image_filepath_index = i;
+                    if (igSelectable(s->image_filepaths[i].filename,
+                                     s->current_image_filepath_index == i,
+                                     ImGuiSelectableFlags_None, (ImVec2){0}))
+                    {
+                        s->current_image = image_load_from_ppm(
+                            s->image_filepaths[i].abs_path_str);
+                        s->current_image_filepath_index = i;
+                    }
                 }
+
+                igEndCombo();
             }
         }
         else
@@ -824,6 +866,38 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
         }
     }
 
+    if (igBeginCombo("Add New Op", "Select...", 0))
+    {
+        for (int i = 1; i < ARRAY_LENGTH(g_image_operation_meta); i++)
+        {
+            igSelectable(g_image_operation_meta[i].name, false, 0,
+                         (ImVec2){0, 0});
+        }
+        igEndCombo();
+    }
+
+    igEnd();
+
+    glBindTexture(GL_TEXTURE_2D, s->current_image.texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    igBegin("Test Image", NULL, 0);
+    if (!image_is_valid(&s->current_image))
+    {
+        igText("Image Unavailable");
+    }
+    else
+    {
+        igImage((ImTextureID)(uintptr_t)s->current_image.texture,
+                (ImVec2){100, 100}, (ImVec2){0, 0}, (ImVec2){1, 1},
+                (ImVec4){1, 0, 0, 1}, (ImVec4){0, 1, 0, 0});
+        igPlotHistogramFnPtr("Histogram", &image_imgui_histogram_get_value,
+                             &s->current_image, s->current_image.max_color + 1,
+                             0, NULL, FLT_MAX, FLT_MAX, (ImVec2){256, 256});
+    }
     igEnd();
 
     glViewport(0, 0, input->window_size.x, input->window_size.y);
@@ -836,3 +910,14 @@ EXAMPLE_UPDATE_FN_SIG(image_processing)
         r_vb_draw(&s->vb);
     }
 }
+
+#define USER_INIT                                                              \
+    Scene scene = {0};                                                         \
+    s_init(&scene, &input);                                                    \
+    s_switch_scene(&scene, EXAMPLE_LITERAL(image_processing));
+
+#define USER_UPDATE s_update(&scene);
+
+#define USER_CLEANUP s_cleanup(&scene);
+
+//#include "../../win32_main.inl"
