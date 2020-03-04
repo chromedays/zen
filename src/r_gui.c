@@ -22,6 +22,8 @@ void r_gui_new_frame(const Input* input)
     io->KeyCtrl = input->key_ctrl;
     io->KeyShift = input->key_shift;
     io->KeyAlt = input->key_alt;
+    for (int i = 0; i < input->chcount; i++)
+        ImGuiIO_AddInputCharacter(io, input->chbuf[i]);
     io->MouseDown[0] = input->mouse_down[0];
     io->MouseDown[1] = input->mouse_down[1];
     io->MouseDown[2] = input->mouse_down[2];

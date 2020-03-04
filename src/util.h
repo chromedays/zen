@@ -1,8 +1,8 @@
 #ifndef UTIL_H
 #define UTIL_H
 
-// TODO: Cast to int
 #define ARRAY_LENGTH(arr) ((int)(sizeof(arr) / sizeof(*(arr))))
+#define ARRAY_CLEAR(arr) memset(arr, 0, sizeof(arr))
 
 #if defined(_MSC_VER)
 #define ALIGN_AS(bytes) __declspec(align(bytes))

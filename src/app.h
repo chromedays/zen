@@ -1,5 +1,6 @@
 #ifndef APP_H
 #define APP_H
+#include "primitive.h"
 #include <himath.h>
 #include <stdbool.h>
 
@@ -22,6 +23,8 @@ typedef struct Input_
     bool mouse_down[3];
     bool mouse_pressed[3];
     bool mouse_released[3];
+    uint chbuf[1000];
+    int chcount;
     IVec2 mouse_delta;
     IVec2 mouse_pos;
     IVec2 window_size;

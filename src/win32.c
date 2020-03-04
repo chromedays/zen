@@ -83,6 +83,10 @@ LRESULT CALLBACK win32_message_callback(HWND window,
         if (g_input && wp < ARRAY_LENGTH(g_input->key_down))
             g_input->key_down[wp] = false;
         break;
+    case WM_CHAR:
+        ASSERT(g_input->chcount < ARRAY_LENGTH(g_input->chbuf));
+        g_input->chbuf[g_input->chcount++] = (uint)wp;
+        break;
     case WM_SETCURSOR:
         if (g_input)
         {
@@ -205,8 +209,9 @@ void win32_pre_update_input()
     if (!g_input)
         return;
     Input* input = g_input;
-    memset(input->mouse_pressed, 0, sizeof(input->mouse_pressed));
-    memset(input->mouse_released, 0, sizeof(input->mouse_released));
+    ARRAY_CLEAR(input->mouse_pressed);
+    ARRAY_CLEAR(input->mouse_released);
+    ARRAY_CLEAR(input->chbuf);
 }
 
 void win32_update_input(const Win32App* app)
