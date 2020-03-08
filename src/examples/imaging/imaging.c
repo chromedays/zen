@@ -94,6 +94,6 @@ EXAMPLE_UPDATE_FN_SIG(imaging)
 
 #define USER_CLEANUP s_cleanup(&scene);
 
-#include "../../win32_main.inl"
+//#include "../../win32_main.inl"
 
 #endif // IMAGING_H

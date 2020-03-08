@@ -35,7 +35,7 @@ typedef enum DrawMode_
     DrawMode_AlbedoMap,
 } DrawMode;
 
-typedef struct CS300_
+typedef struct GraphicsScene_
 {
     Path model_file_paths[MAX_MODEL_FILES_COUNT];
     int model_file_paths_count;
@@ -78,16 +78,16 @@ typedef struct CS300_
     bool copy_depth;
     IVec2 models_count;
     IVec2 orbits_count;
-} CS300;
+} GraphicsScene;
 
 static FILE_FOREACH_FN_DECL(push_model_filename)
 {
-    CS300* s = (CS300*)udata;
+    GraphicsScene* s = (GraphicsScene*)udata;
     ASSERT(s->model_file_paths_count <= ARRAY_LENGTH(s->model_file_paths));
     s->model_file_paths[s->model_file_paths_count++] = fs_path_copy(*file_path);
 }
 
-static void try_switch_model(CS300* s, int new_model_index)
+static void try_switch_model(GraphicsScene* s, int new_model_index)
 {
     if (s->current_model_index != new_model_index)
     {
@@ -130,7 +130,7 @@ static float get_channel_function2(float x, float period)
     return (0.5f * cosf(coeff * (x + period * 0.5f)) + 0.5f);
 }
 
-static void update_light_colors(CS300* s)
+static void update_light_colors(GraphicsScene* s)
 {
     // Smoothly interpolate from red to green to blue
     for (int i = 0; i < s->light_sources_count; i++)
@@ -153,10 +153,10 @@ static void update_light_colors(CS300* s)
     }
 }
 
-EXAMPLE_INIT_FN_SIG(cs300)
+EXAMPLE_INIT_FN_SIG(graphics)
 {
-    Example* e = e_example_make("cs300", CS300);
-    CS300* s = (CS300*)e->scene;
+    Example* e = e_example_make("graphics", GraphicsScene);
+    GraphicsScene* s = (GraphicsScene*)e->scene;
 
     Path model_root_path = fs_path_make_working_dir();
     fs_path_append2(&model_root_path, "shared", "models");
@@ -259,10 +259,10 @@ EXAMPLE_INIT_FN_SIG(cs300)
     return e;
 }
 
-EXAMPLE_CLEANUP_FN_SIG(cs300)
+EXAMPLE_CLEANUP_FN_SIG(graphics)
 {
     Example* e = (Example*)udata;
-    CS300* s = (CS300*)e->scene;
+    GraphicsScene* s = (GraphicsScene*)e->scene;
 
     glDeleteProgram(s->deferred_second_pass_shader);
     glDeleteProgram(s->deferred_first_pass_shader);
@@ -290,7 +290,7 @@ EXAMPLE_CLEANUP_FN_SIG(cs300)
     free(e);
 }
 
-static void update_light_source_transforms(CS300* s)
+static void update_light_source_transforms(GraphicsScene* s)
 {
     for (int i = 0; i < s->light_sources_count; i++)
     {
@@ -307,7 +307,7 @@ static void update_light_source_transforms(CS300* s)
     }
 }
 
-void prepare_per_frame(Example* e, const CS300* s, const Input* input)
+void prepare_per_frame(Example* e, const GraphicsScene* s, const Input* input)
 {
     ExamplePerFrameUBO per_frame = {0};
     per_frame.phong_lights_count = s->light_sources_count;
@@ -332,7 +332,7 @@ void prepare_per_frame(Example* e, const CS300* s, const Input* input)
     e_apply_per_frame_ubo(e, &per_frame);
 }
 
-static void draw_deferred_objects(Example* e, const CS300* s)
+static void draw_deferred_objects(Example* e, const GraphicsScene* s)
 {
     // First pass
     glBindFramebuffer(GL_FRAMEBUFFER, s->gbuffer.framebuffer);
@@ -403,7 +403,7 @@ static void draw_deferred_objects(Example* e, const CS300* s)
     glClear(GL_DEPTH_BUFFER_BIT);
 }
 
-static void copy_depth_buffer(const CS300* s, IVec2 window_size)
+static void copy_depth_buffer(const GraphicsScene* s, IVec2 window_size)
 {
     // Copy depth buffer written from deferred rendering pass
     glBindFramebuffer(GL_READ_FRAMEBUFFER, s->gbuffer.framebuffer);
@@ -415,7 +415,7 @@ static void copy_depth_buffer(const CS300* s, IVec2 window_size)
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 }
 
-static void draw_debug_objects(Example* e, const CS300* s)
+static void draw_debug_objects(Example* e, const GraphicsScene* s)
 {
     // Draw debug objects (e.g. light sources) in forward rendering
     for (int i = 0; i < s->light_sources_count; i++)
@@ -431,10 +431,10 @@ static void draw_debug_objects(Example* e, const CS300* s)
     }
 }
 
-EXAMPLE_UPDATE_FN_SIG(cs300)
+EXAMPLE_UPDATE_FN_SIG(graphics)
 {
     Example* e = (Example*)udata;
-    CS300* s = (CS300*)e->scene;
+    GraphicsScene* s = (GraphicsScene*)e->scene;
 
     bool status = false;
     igSetNextWindowSize((ImVec2){400, (float)input->window_size.y},
@@ -512,10 +512,10 @@ EXAMPLE_UPDATE_FN_SIG(cs300)
 #define USER_INIT                                                              \
     Scene scene = {0};                                                         \
     s_init(&scene, &input);                                                    \
-    s_switch_scene(&scene, EXAMPLE_LITERAL(cs300));
+    s_switch_scene(&scene, EXAMPLE_LITERAL(graphics));
 
 #define USER_UPDATE s_update(&scene);
 
 #define USER_CLEANUP s_cleanup(&scene);
 
-//#include "../../win32_main.inl"
+#include "../../win32_main.inl"
