@@ -456,8 +456,13 @@ static void draw_debug_objects(Example* e, const GraphicsScene* s)
         glDisable(GL_CULL_FACE);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         glUseProgram(s->light_source_shader);
+        FVec3 scaled_bv_c = {
+            -s->model_aabb.c[0] * s->model_scale,
+            -s->model_aabb.c[1] * s->model_scale,
+            -s->model_aabb.c[2] * s->model_scale,
+        };
 #if 1
-        Mat4 trans_mat = mat4_translation(s->model_pos);
+        Mat4 trans_mat = mat4_translation(fvec3_sub(scaled_bv_c, s->model_pos));
         Mat4 scale_mat = mat4_scalev((FVec3){
             s->model_aabb.r[0] * 2 * s->model_scale,
             s->model_aabb.r[1] * 2 * s->model_scale,
@@ -479,6 +484,7 @@ static void draw_debug_objects(Example* e, const GraphicsScene* s)
         scale_mat = mat4_scale(s->model_bsphere.r * 2 * s->model_scale);
         model_mat = mat4_mul(&trans_mat, &scale_mat);
         per_object.model = model_mat;
+        per_object.color = (FVec3){0.5f, 0.5f, 1};
         e_apply_per_object_ubo(e, &per_object);
         r_vb_draw(&s->bsphere_vb);
     }
