@@ -17,5 +17,7 @@ void main()
     vec3 color = texture(COLOR_MAP, uv).xyz;
 
     out_color = vec4(calc_phong(normal, pos), 1);
-    //out_color = vec4(normal, 1);
+    out_color *= length(normal);
+    //out_color = vec4((normal + vec3(1)) * 0.5, 1);
+    //out_color = vec4(vec3(0.5), 1);
 }

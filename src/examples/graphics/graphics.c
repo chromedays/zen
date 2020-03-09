@@ -1,10 +1,5 @@
-#include "../../example.h"
-#include "../../resource.h"
-#include "../../filesystem.h"
-#include "../../debug.h"
-#include "../../util.h"
-#include "../../app.h"
-#include <histr.h>
+#include "graphics_bv.h"
+#include "../../all.h"
 #include <stdlib.h>
 #include <math.h>
 
@@ -46,8 +41,15 @@ typedef struct GraphicsScene_
     FVec3 model_pos;
     float model_scale;
     uint model_shader;
+    struct aabb model_aabb;
+    struct bsphere model_bsphere;
 
     uint normal_debug_shader;
+
+    Mesh aabb_mesh;
+    VertexBuffer aabb_vb;
+    Mesh bsphere_mesh;
+    VertexBuffer bsphere_vb;
 
     Mesh light_source_mesh;
     VertexBuffer light_source_vb;
@@ -112,6 +114,13 @@ static void try_switch_model(GraphicsScene* s, int new_model_index)
         s->model_scale = model_normalized_transform.scale;
         s->model_pos = model_normalized_transform.pos;
 
+        s->model_aabb = calc_aabb((float*)s->model_mesh.vertices,
+                                  s->model_mesh.vertices_count,
+                                  offsetof(Vertex, pos), sizeof(Vertex));
+        s->model_bsphere = calc_bsphere((float*)s->model_mesh.vertices,
+                                        s->model_mesh.vertices_count,
+                                        offsetof(Vertex, pos), sizeof(Vertex));
+
         r_vb_init(&s->model_vb, &s->model_mesh, GL_TRIANGLES);
 
         s->current_model_index = new_model_index;
@@ -168,6 +177,11 @@ EXAMPLE_INIT_FN_SIG(graphics)
     s->model_shader = e_shader_load(e, "phong");
 
     s->normal_debug_shader = e_shader_load(e, "visualize_normals");
+
+    s->aabb_mesh = rc_mesh_make_cube();
+    r_vb_init(&s->aabb_vb, &s->aabb_mesh, GL_TRIANGLES);
+    s->bsphere_mesh = rc_mesh_make_sphere(0.5f, 32, 32);
+    r_vb_init(&s->bsphere_vb, &s->bsphere_mesh, GL_TRIANGLES);
 
     s->light_source_mesh = rc_mesh_make_sphere(0.05f, 32, 32);
     r_vb_init(&s->light_source_vb, &s->light_source_mesh, GL_TRIANGLES);
@@ -334,6 +348,8 @@ void prepare_per_frame(Example* e, const GraphicsScene* s, const Input* input)
 
 static void draw_deferred_objects(Example* e, const GraphicsScene* s)
 {
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
     // First pass
     glBindFramebuffer(GL_FRAMEBUFFER, s->gbuffer.framebuffer);
     glClearColor(0, 0, 0, 0);
@@ -353,10 +369,15 @@ static void draw_deferred_objects(Example* e, const GraphicsScene* s)
             {
                 FVec3 scene_offset = {(float)x * 1.1f, 0, (float)z * 1.1f};
                 ExamplePerObjectUBO per_object = {0};
-                Mat4 scale_mat = mat4_scale(s->model_scale);
-                Mat4 rot_mat = mat4_identity();
+#if 1
                 Mat4 trans_mat =
                     mat4_translation(fvec3_add(s->model_pos, scene_offset));
+                Mat4 scale_mat = mat4_scale(s->model_scale);
+#else
+                Mat4 scale_mat = mat4_identity();
+                Mat4 trans_mat = mat4_translation(scene_offset);
+#endif
+                Mat4 rot_mat = mat4_identity();
                 per_object.model = mat4_mul(&trans_mat, &scale_mat);
                 per_object.model = mat4_mul(&rot_mat, &per_object.model);
                 e_apply_per_object_ubo(e, &per_object);
@@ -417,7 +438,7 @@ static void copy_depth_buffer(const GraphicsScene* s, IVec2 window_size)
 
 static void draw_debug_objects(Example* e, const GraphicsScene* s)
 {
-    // Draw debug objects (e.g. light sources) in forward rendering
+    // Draw light sources
     for (int i = 0; i < s->light_sources_count; i++)
     {
         Mat4 trans_mat = mat4_translation(s->light_sources[i].pos);
@@ -428,6 +449,38 @@ static void draw_debug_objects(Example* e, const GraphicsScene* s)
         e_apply_per_object_ubo(e, &per_object);
         glUseProgram(s->light_source_shader);
         r_vb_draw(&s->light_source_vb);
+    }
+
+    // Draw bounding volumes
+    {
+        glDisable(GL_CULL_FACE);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glUseProgram(s->light_source_shader);
+#if 1
+        Mat4 trans_mat = mat4_translation(s->model_pos);
+        Mat4 scale_mat = mat4_scalev((FVec3){
+            s->model_aabb.r[0] * 2 * s->model_scale,
+            s->model_aabb.r[1] * 2 * s->model_scale,
+            s->model_aabb.r[2] * 2 * s->model_scale,
+        });
+#else
+        Mat4 trans_mat = mat4_identity();
+        Mat4 scale_mat = mat4_scalev((FVec3){
+            s->model_aabb.r[0] * 2,
+            s->model_aabb.r[1] * 2,
+            s->model_aabb.r[2] * 2,
+        });
+#endif
+        Mat4 model_mat = mat4_mul(&trans_mat, &scale_mat);
+        ExamplePerObjectUBO per_object = {.model = model_mat,
+                                          .color = (FVec3){1, 0, 0}};
+        e_apply_per_object_ubo(e, &per_object);
+        r_vb_draw(&s->aabb_vb);
+        scale_mat = mat4_scale(s->model_bsphere.r * 2 * s->model_scale);
+        model_mat = mat4_mul(&trans_mat, &scale_mat);
+        per_object.model = model_mat;
+        e_apply_per_object_ubo(e, &per_object);
+        r_vb_draw(&s->bsphere_vb);
     }
 }
 
