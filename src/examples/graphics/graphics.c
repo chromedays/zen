@@ -30,6 +30,261 @@ typedef enum DrawMode_
     DrawMode_AlbedoMap,
 } DrawMode;
 
+typedef struct transform
+{
+    FVec3 pos;
+    FVec3 scale;
+    FVec3 rot;
+} transform_t;
+
+typedef struct scene_object
+{
+    Mesh* mesh;
+    VertexBuffer* vb;
+    struct transform transform;
+} scene_object_t;
+
+static void create_point_cloud(struct scene_object* objects,
+                               int objects_count,
+                               float** out_points,
+                               int* out_points_count)
+{
+    *out_points_count = 0;
+    for (int i = 0; i < objects_count; i++)
+    {
+        struct scene_object* o = &objects[i];
+        *out_points_count += o->mesh->vertices_count;
+    }
+
+    *out_points = (float*)malloc(*out_points_count * sizeof(float[3]));
+
+    float* p = *out_points;
+    for (int i = 0; i < objects_count; i++)
+    {
+        struct scene_object* o = &objects[i];
+        for (int j = 0; j < o->mesh->vertices_count; j++)
+        {
+            FVec3 tp = o->mesh->vertices[j].pos;
+            // TODO: Support rotation
+            tp = fvec3_mul(tp, o->transform.scale);
+            tp = fvec3_add(tp, o->transform.pos);
+            float3_copy(p, (float*)&tp);
+            p += 3;
+        }
+    }
+}
+
+typedef enum node_type
+{
+    node_type_leaf,
+    node_type_node,
+} node_type_t;
+
+typedef struct node
+{
+    struct bvolume bv;
+    enum node_type type;
+    float* points_base;
+    int points_count;
+
+    struct node* left;
+    struct node* right;
+} node_t;
+
+static int compare_points(int* axis, const float* a, const float* b)
+{
+    if (a[*axis] < b[*axis])
+        return -1;
+    else
+        return 1;
+}
+
+static int partition_points(float* points, int points_count, int axis)
+{
+    qsort_s(points, points_count, sizeof(float[3]), &compare_points, &axis);
+
+    return points_count / 2;
+}
+
+static void tree_cleanup(struct node* tree)
+{
+    if (!tree)
+        return;
+    tree_cleanup(tree->left);
+    tree_cleanup(tree->right);
+
+    free(tree);
+}
+
+static void top_down_bv_tree_rec(struct node** tree,
+                                 float* points,
+                                 int points_count,
+                                 struct bvolume* bv,
+                                 int depth,
+                                 enum bv_type type);
+static void top_down_bv_tree(struct node** tree,
+                             float* points,
+                             int points_count,
+                             enum bv_type type)
+{
+    struct bvolume bv;
+    bv.type = type;
+    switch (type)
+    {
+    case bv_type_aabb:
+        bv.aabb = calc_aabb(points, points_count, 0, sizeof(float[3]));
+        break;
+    case bv_type_sphere:
+        bv.sphere = calc_bsphere(points, points_count, 0, sizeof(float[3]));
+        break;
+    }
+    top_down_bv_tree_rec(tree, points, points_count, &bv, 0, type);
+}
+
+static void top_down_bv_tree_rec(struct node** tree,
+                                 float* points,
+                                 int points_count,
+                                 struct bvolume* bv,
+                                 int depth,
+                                 enum bv_type type)
+{
+    if (depth >= 10)
+        return;
+
+    ASSERT(points_count > 0);
+    int min_points_count_per_leaf = 500;
+
+    struct node* node = (struct node*)calloc(sizeof(*node), 1);
+    *tree = node;
+
+    node->bv = *bv;
+
+    if (points_count <= min_points_count_per_leaf)
+    {
+        node->type = node_type_leaf;
+        node->points_base = points;
+        node->points_count = points_count;
+    }
+    else
+    {
+        node->type = node_type_node;
+
+        float min_total_child_volume = FLT_MAX;
+        int min_axis = -1;
+        struct bvolume min_left_bv;
+        struct bvolume min_right_bv;
+        int min_k = -1;
+
+        for (int i = 0; i < 3; i++)
+        {
+            int k = partition_points(points, points_count, i);
+            struct bvolume left_bv;
+            struct bvolume right_bv;
+            left_bv.type = right_bv.type = type;
+            float left_volume = 0;
+            float right_volume = 0;
+            switch (type)
+            {
+            case bv_type_aabb:
+                left_bv.aabb = calc_aabb(points, k, 0, sizeof(float[3]));
+                left_volume = aabb_volume(&left_bv.aabb);
+                right_bv.aabb = calc_aabb(points + k * 3, points_count - k, 0,
+                                          sizeof(float[3]));
+                right_volume = aabb_volume(&right_bv.aabb);
+                break;
+            case bv_type_sphere:
+                left_bv.sphere = calc_bsphere(points, k, 0, sizeof(float[3]));
+                left_volume = bsphere_volume(&left_bv.sphere);
+                right_bv.sphere = calc_bsphere(points + k * 3, points_count - k,
+                                               0, sizeof(float[3]));
+                right_volume = bsphere_volume(&right_bv.sphere);
+                break;
+            }
+            float total_volume = left_volume + right_volume;
+
+            if (min_total_child_volume > total_volume)
+            {
+                min_total_child_volume = total_volume;
+                min_axis = i;
+                min_left_bv = left_bv;
+                min_right_bv = right_bv;
+                min_k = k;
+            }
+        }
+
+        ASSERT(min_k >= 0);
+
+        qsort_s(points, points_count, sizeof(float[3]), &compare_points,
+                &min_axis);
+
+        top_down_bv_tree_rec(&node->left, points, min_k, &min_left_bv,
+                             depth + 1, type);
+        top_down_bv_tree_rec(&node->right, points + min_k * 3,
+                             points_count - min_k, &min_right_bv, depth + 1,
+                             type);
+    }
+}
+
+static void draw_bvh_rec(Example* e,
+                         struct node* tree,
+                         uint shader,
+                         VertexBuffer* vb,
+                         int depth,
+                         int highlight_depth)
+{
+    if (!tree)
+        return;
+
+    FVec3 color = {0.5f, 0.5f, 1};
+
+    if (depth == highlight_depth)
+    {
+        struct bvolume* bv = &tree->bv;
+
+        glDisable(GL_CULL_FACE);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glUseProgram(shader);
+        Mat4 trans_mat;
+        Mat4 scale_mat;
+        switch (bv->type)
+        {
+        case bv_type_aabb: {
+            struct aabb* aabb = &bv->aabb;
+            FVec3 c = {aabb->c[0], aabb->c[1], aabb->c[2]};
+            trans_mat = mat4_translation(c);
+            scale_mat = mat4_scalev(
+                (FVec3){aabb->r[0] * 2, aabb->r[1] * 2, aabb->r[2] * 2});
+            break;
+        }
+        case bv_type_sphere: {
+            struct bsphere* bsphere = &bv->sphere;
+            FVec3 c = {bsphere->c[0], bsphere->c[1], bsphere->c[2]};
+            trans_mat = mat4_translation(c);
+            scale_mat = mat4_scale(bsphere->r * 2);
+
+            break;
+        }
+        }
+
+        Mat4 model_mat = mat4_mul(&trans_mat, &scale_mat);
+        ExamplePerObjectUBO per_object = {.model = model_mat, .color = color};
+        e_apply_per_object_ubo(e, &per_object);
+        r_vb_draw(vb);
+    }
+
+    draw_bvh_rec(e, tree->left, shader, vb, depth + 1, highlight_depth);
+    draw_bvh_rec(e, tree->right, shader, vb, depth + 1, highlight_depth);
+}
+
+static void draw_bvh(Example* e,
+                     struct node* tree,
+                     uint shader,
+                     VertexBuffer* vb,
+                     int highlight_depth)
+{
+    draw_bvh_rec(e, tree, shader, vb, 0, highlight_depth);
+}
+
 typedef struct GraphicsScene_
 {
     Path model_file_paths[MAX_MODEL_FILES_COUNT];
@@ -50,6 +305,13 @@ typedef struct GraphicsScene_
     VertexBuffer aabb_vb;
     Mesh bsphere_mesh;
     VertexBuffer bsphere_vb;
+
+    float* scene_points;
+    int scene_points_count;
+    struct node* bvh_aabb;
+    struct node* bvh_sphere;
+    int bvh_highlight_depth;
+    enum bv_type visible_bv_type;
 
     Mesh light_source_mesh;
     VertexBuffer light_source_vb;
@@ -122,6 +384,25 @@ static void try_switch_model(GraphicsScene* s, int new_model_index)
                                         offsetof(Vertex, pos), sizeof(Vertex));
 
         r_vb_init(&s->model_vb, &s->model_mesh, GL_TRIANGLES);
+
+        scene_object_t scene_objects[1] = {{
+            .mesh = &s->model_mesh,
+            .vb = &s->model_vb,
+            .transform =
+                {
+                    .pos = s->model_pos,
+                    .scale = {s->model_scale, s->model_scale, s->model_scale},
+                },
+        }};
+        free(s->scene_points);
+        tree_cleanup(s->bvh_aabb);
+        tree_cleanup(s->bvh_sphere);
+        create_point_cloud(scene_objects, ARRAY_LENGTH(scene_objects),
+                           &s->scene_points, &s->scene_points_count);
+        top_down_bv_tree(&s->bvh_aabb, s->scene_points, s->scene_points_count,
+                         bv_type_aabb);
+        top_down_bv_tree(&s->bvh_sphere, s->scene_points, s->scene_points_count,
+                         bv_type_sphere);
 
         s->current_model_index = new_model_index;
     }
@@ -436,7 +717,7 @@ static void copy_depth_buffer(const GraphicsScene* s, IVec2 window_size)
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 }
 
-static void draw_debug_objects(Example* e, const GraphicsScene* s)
+static void draw_debug_objects(Example* e, GraphicsScene* s)
 {
     // Draw light sources
     for (int i = 0; i < s->light_sources_count; i++)
@@ -451,6 +732,18 @@ static void draw_debug_objects(Example* e, const GraphicsScene* s)
         r_vb_draw(&s->light_source_vb);
     }
 
+    switch (s->visible_bv_type)
+    {
+    case bv_type_aabb:
+        draw_bvh(e, s->bvh_aabb, s->light_source_shader, &s->aabb_vb,
+                 s->bvh_highlight_depth);
+        break;
+    case bv_type_sphere:
+        draw_bvh(e, s->bvh_sphere, s->light_source_shader, &s->bsphere_vb,
+                 s->bvh_highlight_depth);
+        break;
+    }
+#if 0
     // Draw bounding volumes
     {
         glDisable(GL_CULL_FACE);
@@ -488,6 +781,7 @@ static void draw_debug_objects(Example* e, const GraphicsScene* s)
         e_apply_per_object_ubo(e, &per_object);
         r_vb_draw(&s->bsphere_vb);
     }
+#endif
 }
 
 EXAMPLE_UPDATE_FN_SIG(graphics)
@@ -550,6 +844,11 @@ EXAMPLE_UPDATE_FN_SIG(graphics)
             igSliderInt("Light sources count", &s->light_sources_count, 8, 100,
                         "%d");
             igSliderFloat("Orbit radius", &s->orbit_radius, 1, 100, "%.3f", 1);
+
+            igSliderInt("Highlight BVH Tree Depth", &s->bvh_highlight_depth, 0,
+                        10, "%d");
+            igSliderInt("BV type", (int*)&s->visible_bv_type, 0,
+                        bv_type_count - 1, "%d");
         }
     }
     igEnd();

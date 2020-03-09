@@ -82,6 +82,12 @@ static struct aabb
     return result;
 }
 
+static float aabb_volume(struct aabb* aabb)
+{
+    float result = aabb->r[0] * aabb->r[1] * aabb->r[2] * 8;
+    return result;
+}
+
 typedef struct bsphere
 {
     float c[3];
@@ -98,5 +104,29 @@ static struct bsphere
 
     return result;
 }
+
+static float bsphere_volume(struct bsphere* bsphere)
+{
+    float r = bsphere->r;
+    float result = 4.f / 3.f * 3.141592f * r * r * r;
+    return result;
+}
+
+typedef enum bv_type
+{
+    bv_type_aabb = 0,
+    bv_type_sphere,
+    bv_type_count,
+} bv_type_t;
+
+typedef struct bvolume
+{
+    enum bv_type type;
+    union
+    {
+        struct aabb aabb;
+        struct bsphere sphere;
+    };
+} bvolume_t;
 
 #endif // GRAPHICS_BV_H
