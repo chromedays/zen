@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define MAX_MODEL_FILES_COUNT 100
+#define MAX_MODELS_COUNT 100
 #define MAX_LIGHT_SOURCES_COUNT 100
 
 typedef struct LightSource_
@@ -287,19 +287,16 @@ static void draw_bvh(Example* e,
 
 typedef struct GraphicsScene_
 {
-    Path model_file_paths[MAX_MODEL_FILES_COUNT];
-    int model_file_paths_count;
+    Path model_file_paths[MAX_MODELS_COUNT];
+    Mesh model_meshes[MAX_MODELS_COUNT];
+    VertexBuffer model_vbs[MAX_MODELS_COUNT];
+    int models_count;
 
-    int current_model_index;
-    Mesh model_mesh;
-    VertexBuffer model_vb;
-    FVec3 model_pos;
-    float model_scale;
     uint model_shader;
-    struct aabb model_aabb;
-    struct bsphere model_bsphere;
-
     uint normal_debug_shader;
+
+    struct scene_object scene_objects[100];
+    int scene_objects_count;
 
     Mesh aabb_mesh;
     VertexBuffer aabb_vb;
@@ -340,50 +337,68 @@ typedef struct GraphicsScene_
     DrawMode draw_mode;
 
     bool copy_depth;
-    IVec2 models_count;
     IVec2 orbits_count;
 } GraphicsScene;
 
-static FILE_FOREACH_FN_DECL(push_model_filename)
+static void reconstruct_bvh(GraphicsScene* s)
 {
-    GraphicsScene* s = (GraphicsScene*)udata;
-    ASSERT(s->model_file_paths_count <= ARRAY_LENGTH(s->model_file_paths));
-    s->model_file_paths[s->model_file_paths_count++] = fs_path_copy(*file_path);
+    free(s->scene_points);
+    tree_cleanup(s->bvh_aabb);
+    tree_cleanup(s->bvh_sphere);
+    create_point_cloud(s->scene_objects, s->scene_objects_count,
+                       &s->scene_points, &s->scene_points_count);
+    top_down_bv_tree(&s->bvh_aabb, s->scene_points, s->scene_points_count,
+                     bv_type_aabb);
+    top_down_bv_tree(&s->bvh_sphere, s->scene_points, s->scene_points_count,
+                     bv_type_sphere);
 }
 
+static void add_random_scene_object(GraphicsScene* s)
+{
+    struct scene_object* o = &s->scene_objects[s->scene_objects_count++];
+    int model_index = rand() % s->models_count;
+    o->mesh = &s->model_meshes[model_index];
+    o->vb = &s->model_vbs[model_index];
+    o->transform.scale = (FVec3){1, 1, 1};
+    o->transform.pos.x = (rand() % 25 - 12) * 0.1f;
+    o->transform.pos.y = (rand() % 25 - 12) * 0.1f;
+    o->transform.pos.z = (rand() % 25 - 12) * 0.1f;
+
+    reconstruct_bvh(s);
+}
+
+static FILE_FOREACH_FN_DECL(push_model)
+{
+    GraphicsScene* s = (GraphicsScene*)udata;
+    ASSERT(s->models_count < MAX_MODELS_COUNT);
+    s->model_file_paths[s->models_count] = fs_path_copy(*file_path);
+    Mesh* mesh = &s->model_meshes[s->models_count];
+    rc_mesh_load_from_obj(mesh,
+                          s->model_file_paths[s->models_count].abs_path_str);
+    // Need to compute normals manually
+    if (fvec3_length_sq(mesh->vertices[0].normal) == 0.f)
+        rc_mesh_set_approximate_normals(mesh);
+    NormalizedTransform normalized_transform =
+        rc_mesh_calc_normalized_transform(mesh);
+    for (int i = 0; i < mesh->vertices_count; i++)
+    {
+        Vertex* v = &mesh->vertices[i];
+        v->pos = fvec3_mulf(v->pos, normalized_transform.scale);
+        v->pos = fvec3_add(v->pos, normalized_transform.pos);
+    }
+
+    VertexBuffer* vb = &s->model_vbs[s->models_count];
+    r_vb_init(vb, mesh, GL_TRIANGLES);
+
+    ++s->models_count;
+}
+
+#if 0
 static void try_switch_model(GraphicsScene* s, int new_model_index)
 {
     if (s->current_model_index != new_model_index)
     {
-        ASSERT((new_model_index >= 0) &&
-               (new_model_index < s->model_file_paths_count));
-
-        if (s->current_model_index >= 0)
-        {
-            rc_mesh_cleanup(&s->model_mesh);
-            r_vb_cleanup(&s->model_vb);
-        }
-
-        rc_mesh_load_from_obj(
-            &s->model_mesh, s->model_file_paths[new_model_index].abs_path_str);
-        // Need to compute normals manually
-        if (fvec3_length_sq(s->model_mesh.vertices[0].normal) == 0.f)
-            rc_mesh_set_approximate_normals(&s->model_mesh);
-
-        NormalizedTransform model_normalized_transform =
-            rc_mesh_calc_normalized_transform(&s->model_mesh);
-
-        s->model_scale = model_normalized_transform.scale;
-        s->model_pos = model_normalized_transform.pos;
-
-        s->model_aabb = calc_aabb((float*)s->model_mesh.vertices,
-                                  s->model_mesh.vertices_count,
-                                  offsetof(Vertex, pos), sizeof(Vertex));
-        s->model_bsphere = calc_bsphere((float*)s->model_mesh.vertices,
-                                        s->model_mesh.vertices_count,
-                                        offsetof(Vertex, pos), sizeof(Vertex));
-
-        r_vb_init(&s->model_vb, &s->model_mesh, GL_TRIANGLES);
+        ASSERT((new_model_index >= 0) && (new_model_index < s->models_count));
 
         scene_object_t scene_objects[1] = {{
             .mesh = &s->model_mesh,
@@ -407,6 +422,7 @@ static void try_switch_model(GraphicsScene* s, int new_model_index)
         s->current_model_index = new_model_index;
     }
 }
+#endif
 
 static float get_channel_function1(float x, float period)
 {
@@ -450,19 +466,26 @@ EXAMPLE_INIT_FN_SIG(graphics)
 
     Path model_root_path = fs_path_make_working_dir();
     fs_path_append2(&model_root_path, "shared", "models");
-    fs_for_each_files_with_ext(model_root_path, "obj", &push_model_filename, s);
+    fs_for_each_files_with_ext(model_root_path, "obj", &push_model, s);
     fs_path_cleanup(&model_root_path);
 
-    s->current_model_index = -1;
-    try_switch_model(s, 0);
     s->model_shader = e_shader_load(e, "phong");
-
     s->normal_debug_shader = e_shader_load(e, "visualize_normals");
+
+    add_random_scene_object(s);
+    s->scene_objects[0].mesh = &s->model_meshes[0];
+    s->scene_objects[0].vb = &s->model_vbs[0];
+    s->scene_objects[0].transform.scale.x = 1;
+    s->scene_objects[0].transform.scale.y = 1;
+    s->scene_objects[0].transform.scale.z = 1;
+    s->scene_objects_count = 1;
 
     s->aabb_mesh = rc_mesh_make_cube();
     r_vb_init(&s->aabb_vb, &s->aabb_mesh, GL_TRIANGLES);
     s->bsphere_mesh = rc_mesh_make_sphere(0.5f, 32, 32);
     r_vb_init(&s->bsphere_vb, &s->bsphere_mesh, GL_TRIANGLES);
+
+    reconstruct_bvh(s);
 
     s->light_source_mesh = rc_mesh_make_sphere(0.05f, 32, 32);
     r_vb_init(&s->light_source_vb, &s->light_source_mesh, GL_TRIANGLES);
@@ -546,8 +569,6 @@ EXAMPLE_INIT_FN_SIG(graphics)
         e_shader_load(e, "phong_deferred_second_pass");
 
     s->copy_depth = true;
-    s->models_count.x = 1;
-    s->models_count.y = 1;
     s->orbits_count.x = 1;
     s->orbits_count.y = 1;
 
@@ -575,13 +596,19 @@ EXAMPLE_CLEANUP_FN_SIG(graphics)
     r_vb_cleanup(&s->light_source_vb);
     rc_mesh_cleanup(&s->light_source_mesh);
 
+    free(s->scene_points);
+    tree_cleanup(s->bvh_aabb);
+    tree_cleanup(s->bvh_sphere);
+
     glDeleteProgram(s->model_shader);
-    r_vb_cleanup(&s->model_vb);
-    rc_mesh_cleanup(&s->model_mesh);
+    glDeleteProgram(s->normal_debug_shader);
 
-    for (int i = 0; i < s->model_file_paths_count; i++)
+    for (int i = 0; i < s->models_count; i++)
+    {
+        r_vb_cleanup(&s->model_vbs[i]);
+        rc_mesh_cleanup(&s->model_meshes[i]);
         fs_path_cleanup(&s->model_file_paths[i]);
-
+    }
     free(e);
 }
 
@@ -593,10 +620,8 @@ static void update_light_source_transforms(GraphicsScene* s)
                      s->t * s->orbit_speed_deg);
         float rad = degtorad(deg);
         FVec3 pos = {
-            .x = cosf(rad) * s->orbit_radius +
-                 (float)(s->models_count.x - 1) * 0.5f,
-            .z = sinf(rad) * s->orbit_radius +
-                 (float)(s->models_count.y - 1) * 0.5f,
+            .x = cosf(rad) * s->orbit_radius,
+            .z = sinf(rad) * s->orbit_radius,
         };
         s->light_sources[i].pos = pos;
     }
@@ -605,7 +630,7 @@ static void update_light_source_transforms(GraphicsScene* s)
 void prepare_per_frame(Example* e, const GraphicsScene* s, const Input* input)
 {
     ExamplePerFrameUBO per_frame = {0};
-    per_frame.phong_lights_count = s->light_sources_count;
+    per_frame.phong_lights_count = s->light_sources_count + 1;
     for (int i = 0; i < s->light_sources_count; i++)
     {
         FVec3 color = s->light_sources[i].color;
@@ -617,6 +642,14 @@ void prepare_per_frame(Example* e, const GraphicsScene* s, const Input* input)
         per_frame.phong_lights[i].linear = 0.09f;
         per_frame.phong_lights[i].quadratic = 0.032f;
     }
+    ExamplePhongLight* dir_light =
+        &per_frame.phong_lights[s->light_sources_count];
+    dir_light->type = ExamplePhongLightType_Directional;
+    dir_light->pos_or_dir = (FVec3){1, -1, -1};
+    dir_light->ambient = (FVec3){0.3f, 0.3f, 0.3f};
+    dir_light->diffuse = (FVec3){0.8f, 0.8f, 0.8f};
+    dir_light->specular = (FVec3){0.8f, 0.8f, 0.8f};
+
     per_frame.proj = mat4_persp(
         60, (float)input->window_size.x / (float)input->window_size.y, 0.1f,
         100);
@@ -627,7 +660,7 @@ void prepare_per_frame(Example* e, const GraphicsScene* s, const Input* input)
     e_apply_per_frame_ubo(e, &per_frame);
 }
 
-static void draw_deferred_objects(Example* e, const GraphicsScene* s)
+static void draw_deferred_objects(Example* e, GraphicsScene* s)
 {
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
@@ -640,31 +673,17 @@ static void draw_deferred_objects(Example* e, const GraphicsScene* s)
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
-    if (s->current_model_index >= 0)
+    glUseProgram(s->deferred_first_pass_shader);
+    for (int i = 0; i < s->scene_objects_count; i++)
     {
-        glUseProgram(s->deferred_first_pass_shader);
-
-        for (int z = 0; z < s->models_count.y; z++)
-        {
-            for (int x = 0; x < s->models_count.x; x++)
-            {
-                FVec3 scene_offset = {(float)x * 1.1f, 0, (float)z * 1.1f};
-                ExamplePerObjectUBO per_object = {0};
-#if 1
-                Mat4 trans_mat =
-                    mat4_translation(fvec3_add(s->model_pos, scene_offset));
-                Mat4 scale_mat = mat4_scale(s->model_scale);
-#else
-                Mat4 scale_mat = mat4_identity();
-                Mat4 trans_mat = mat4_translation(scene_offset);
-#endif
-                Mat4 rot_mat = mat4_identity();
-                per_object.model = mat4_mul(&trans_mat, &scale_mat);
-                per_object.model = mat4_mul(&rot_mat, &per_object.model);
-                e_apply_per_object_ubo(e, &per_object);
-                r_vb_draw(&s->model_vb);
-            }
-        }
+        struct scene_object* o = &s->scene_objects[i];
+        struct transform* t = &o->transform;
+        ExamplePerObjectUBO per_object = {0};
+        Mat4 trans_mat = mat4_translation(t->pos);
+        Mat4 scale_mat = mat4_scalev(t->scale);
+        per_object.model = mat4_mul(&trans_mat, &scale_mat);
+        e_apply_per_object_ubo(e, &per_object);
+        r_vb_draw(o->vb);
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -743,45 +762,6 @@ static void draw_debug_objects(Example* e, GraphicsScene* s)
                  s->bvh_highlight_depth);
         break;
     }
-#if 0
-    // Draw bounding volumes
-    {
-        glDisable(GL_CULL_FACE);
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glUseProgram(s->light_source_shader);
-        FVec3 scaled_bv_c = {
-            -s->model_aabb.c[0] * s->model_scale,
-            -s->model_aabb.c[1] * s->model_scale,
-            -s->model_aabb.c[2] * s->model_scale,
-        };
-#if 1
-        Mat4 trans_mat = mat4_translation(fvec3_sub(scaled_bv_c, s->model_pos));
-        Mat4 scale_mat = mat4_scalev((FVec3){
-            s->model_aabb.r[0] * 2 * s->model_scale,
-            s->model_aabb.r[1] * 2 * s->model_scale,
-            s->model_aabb.r[2] * 2 * s->model_scale,
-        });
-#else
-        Mat4 trans_mat = mat4_identity();
-        Mat4 scale_mat = mat4_scalev((FVec3){
-            s->model_aabb.r[0] * 2,
-            s->model_aabb.r[1] * 2,
-            s->model_aabb.r[2] * 2,
-        });
-#endif
-        Mat4 model_mat = mat4_mul(&trans_mat, &scale_mat);
-        ExamplePerObjectUBO per_object = {.model = model_mat,
-                                          .color = (FVec3){1, 0, 0}};
-        e_apply_per_object_ubo(e, &per_object);
-        r_vb_draw(&s->aabb_vb);
-        scale_mat = mat4_scale(s->model_bsphere.r * 2 * s->model_scale);
-        model_mat = mat4_mul(&trans_mat, &scale_mat);
-        per_object.model = model_mat;
-        per_object.color = (FVec3){0.5f, 0.5f, 1};
-        e_apply_per_object_ubo(e, &per_object);
-        r_vb_draw(&s->bsphere_vb);
-    }
-#endif
 }
 
 EXAMPLE_UPDATE_FN_SIG(graphics)
@@ -796,7 +776,8 @@ EXAMPLE_UPDATE_FN_SIG(graphics)
     if (igBegin("Control Panel", &status,
                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize))
     {
-        if (igCollapsingHeader("Select Model", ImGuiTreeNodeFlags_DefaultOpen))
+#if 0
+        if (igCollapsingHeader("Select Model", 0))
         {
             for (int i = 0; i < s->model_file_paths_count; i++)
             {
@@ -807,8 +788,9 @@ EXAMPLE_UPDATE_FN_SIG(graphics)
                 }
             }
         }
+#endif
 
-        if (igCollapsingHeader("View Mode", ImGuiTreeNodeFlags_DefaultOpen))
+        if (igCollapsingHeader("View Mode", 0))
         {
             if (igMenuItemBool("Final Scene", NULL, false, true))
             {
@@ -831,24 +813,32 @@ EXAMPLE_UPDATE_FN_SIG(graphics)
             }
         }
 
-        if (igCollapsingHeader("Misc", ImGuiTreeNodeFlags_DefaultOpen))
+        if (igCollapsingHeader("Scene Setup", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (igButton("Add Random Object", (ImVec2){0}))
+            {
+                add_random_scene_object(s);
+            }
+        }
+        if (igCollapsingHeader("BVH", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            igSliderInt("Highlight Depth", &s->bvh_highlight_depth, 0, 10,
+                        "%d");
+            igSliderInt("BV type", (int*)&s->visible_bv_type, 0,
+                        bv_type_count - 1, "%d");
+        }
+
+        if (igCollapsingHeader("Misc", 0))
         {
             if (igCheckbox("Copy Depth", &s->copy_depth))
             {
             }
 
-            igSliderInt("Models Count X", &s->models_count.x, 1, 100, "%d");
-            igSliderInt("Models Count Y", &s->models_count.y, 1, 100, "%d");
             igSliderFloat("Light intensity", &s->light_intensity, 0.4f, 1,
                           "%.3f", 1);
             igSliderInt("Light sources count", &s->light_sources_count, 8, 100,
                         "%d");
             igSliderFloat("Orbit radius", &s->orbit_radius, 1, 100, "%.3f", 1);
-
-            igSliderInt("Highlight BVH Tree Depth", &s->bvh_highlight_depth, 0,
-                        10, "%d");
-            igSliderInt("BV type", (int*)&s->visible_bv_type, 0,
-                        bv_type_count - 1, "%d");
         }
     }
     igEnd();
