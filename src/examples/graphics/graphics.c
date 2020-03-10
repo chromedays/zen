@@ -84,8 +84,11 @@ typedef struct node
 {
     struct bvolume bv;
     enum node_type type;
+
     float* points_base;
     int points_count;
+
+    struct scene_object* scene_object;
 
     struct node* left;
     struct node* right;
@@ -225,6 +228,159 @@ static void top_down_bv_tree_rec(struct node** tree,
     }
 }
 
+static void find_nodes_to_merge(struct node** nodes,
+                                int nodes_count,
+                                int* out_a,
+                                int* out_b)
+{
+    float min_d_sq = FLT_MAX;
+    for (int i = 0; i < nodes_count; i++)
+    {
+        struct node* n0 = nodes[i];
+        float c0[3];
+
+        switch (n0->bv.type)
+        {
+        case bv_type_aabb: float3_copy(c0, n0->bv.aabb.c); break;
+        case bv_type_sphere: float3_copy(c0, n0->bv.sphere.c); break;
+        }
+
+        for (int j = 0; j < nodes_count; j++)
+        {
+            if (i == j)
+                continue;
+
+            struct node* n1 = nodes[j];
+            float c1[3];
+
+            switch (n1->bv.type)
+            {
+            case bv_type_aabb: float3_copy(c1, n1->bv.aabb.c); break;
+            case bv_type_sphere: float3_copy(c1, n1->bv.sphere.c); break;
+            }
+
+            float dv[3];
+            float3_sub_r(dv, c0, c1);
+            float d_sq = float3_length_sq(dv);
+            if (min_d_sq > d_sq)
+            {
+                *out_a = i;
+                *out_b = j;
+                min_d_sq = d_sq;
+            }
+        }
+    }
+}
+static void collect_scene_objects_rec(struct node* tree,
+                                      int* count,
+                                      struct scene_object* out_scene_objects)
+{
+    if (tree->type == node_type_leaf)
+    {
+        out_scene_objects[(*count)++] = *tree->scene_object;
+    }
+    else
+    {
+        collect_scene_objects_rec(tree->left, count, out_scene_objects);
+        collect_scene_objects_rec(tree->right, count, out_scene_objects);
+    }
+}
+
+static void collect_scene_objects(struct node* tree,
+                                  struct scene_object* out_scene_objects,
+                                  int* out_count)
+{
+    *out_count = 0;
+    collect_scene_objects_rec(tree, out_count, out_scene_objects);
+}
+
+static struct node* bottom_up_bv_tree(struct scene_object* objects,
+                                      int objects_count,
+                                      enum bv_type type)
+{
+    ASSERT(objects_count > 0);
+
+    struct node** nodes =
+        (struct node**)calloc(objects_count * sizeof(*nodes), 1);
+    for (int i = 0; i < objects_count; i++)
+    {
+        struct scene_object* o = &objects[i];
+        struct node* l = nodes[i] = (struct node*)calloc(sizeof(*l), 1);
+        l->type = node_type_leaf;
+        l->scene_object = o;
+        l->bv.type = type;
+        float* points;
+        int points_count;
+        create_point_cloud(o, 1, &points, &points_count);
+        switch (type)
+        {
+        case bv_type_aabb:
+            l->bv.aabb = calc_aabb(points, points_count, 0, sizeof(float[3]));
+            break;
+        case bv_type_sphere:
+            l->bv.sphere =
+                calc_bsphere(points, points_count, 0, sizeof(float[3]));
+            break;
+        }
+        free(points);
+    }
+
+    struct scene_object* subtree_objects =
+        malloc(objects_count * sizeof(*subtree_objects));
+    int subtree_objects_count = 0;
+
+    while (objects_count > 1)
+    {
+        int a, b;
+        find_nodes_to_merge(nodes, objects_count, &a, &b);
+        struct node* pair = calloc(sizeof(*pair), 1);
+        pair->type = node_type_node;
+        pair->left = nodes[a];
+        pair->right = nodes[b];
+
+        collect_scene_objects(pair, subtree_objects, &subtree_objects_count);
+
+        float* points;
+        int points_count;
+        create_point_cloud(subtree_objects, subtree_objects_count, &points,
+                           &points_count);
+
+        pair->bv.type = type;
+        switch (type)
+        {
+        case bv_type_aabb:
+            pair->bv.aabb =
+                calc_aabb(points, points_count, 0, sizeof(float[3]));
+            break;
+        case bv_type_sphere:
+            pair->bv.sphere =
+                calc_bsphere(points, points_count, 0, sizeof(float[3]));
+            break;
+        }
+
+        free(points);
+
+        if (a > b)
+        {
+            int temp = a;
+            a = b;
+            b = temp;
+        }
+
+        nodes[a] = pair;
+        nodes[b] = nodes[objects_count - 1];
+
+        --objects_count;
+    }
+
+    struct node* root = nodes[0];
+
+    free(subtree_objects);
+    free(nodes);
+
+    return root;
+}
+
 static void draw_bvh_rec(Example* e,
                          struct node* tree,
                          uint shader,
@@ -308,6 +464,7 @@ typedef struct GraphicsScene_
     struct node* bvh_aabb;
     struct node* bvh_sphere;
     int bvh_highlight_depth;
+    int bvh_type;
     enum bv_type visible_bv_type;
 
     Mesh light_source_mesh;
@@ -347,10 +504,20 @@ static void reconstruct_bvh(GraphicsScene* s)
     tree_cleanup(s->bvh_sphere);
     create_point_cloud(s->scene_objects, s->scene_objects_count,
                        &s->scene_points, &s->scene_points_count);
-    top_down_bv_tree(&s->bvh_aabb, s->scene_points, s->scene_points_count,
-                     bv_type_aabb);
-    top_down_bv_tree(&s->bvh_sphere, s->scene_points, s->scene_points_count,
-                     bv_type_sphere);
+    if (s->bvh_type == 0)
+    {
+        s->bvh_aabb = bottom_up_bv_tree(s->scene_objects,
+                                        s->scene_objects_count, bv_type_aabb);
+        s->bvh_sphere = bottom_up_bv_tree(
+            s->scene_objects, s->scene_objects_count, bv_type_sphere);
+    }
+    else
+    {
+        top_down_bv_tree(&s->bvh_aabb, s->scene_points, s->scene_points_count,
+                         bv_type_aabb);
+        top_down_bv_tree(&s->bvh_sphere, s->scene_points, s->scene_points_count,
+                         bv_type_sphere);
+    }
 }
 
 static void add_random_scene_object(GraphicsScene* s)
@@ -824,8 +991,17 @@ EXAMPLE_UPDATE_FN_SIG(graphics)
         {
             igSliderInt("Highlight Depth", &s->bvh_highlight_depth, 0, 10,
                         "%d");
-            igSliderInt("BV type", (int*)&s->visible_bv_type, 0,
+            igText("BV Type (0: AABB, 1: Sphere)");
+            igSliderInt("##BV type", (int*)&s->visible_bv_type, 0,
                         bv_type_count - 1, "%d");
+            igText("BVH Type (0: bottom-up, 1: top-down)");
+            int new_bvh_type = s->bvh_type;
+            igSliderInt("##BVH type", &new_bvh_type, 0, 1, "%d");
+            if (new_bvh_type != s->bvh_type)
+            {
+                s->bvh_type = new_bvh_type;
+                reconstruct_bvh(s);
+            }
         }
 
         if (igCollapsingHeader("Misc", 0))
