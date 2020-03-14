@@ -34,81 +34,53 @@ extern "C" void calc_cubic_spline(const FVec3* input_points,
 }
 
 static void cubic_spline(std::vector<float>* xs, std::vector<float>* out_xs)
-
 {
     int n = (int)xs->size() - 1;
-    float* alpha = new float[n + 1];
 
-    int i = 0;
-
-    // Step 2.
-
-    for (i = 1; i <= n - 1; i++)
-        alpha[i] = 3.f * (*xs)[i + 1] - 6.f * (*xs)[i] + 3.f * (*xs)[i - 1];
-
-    // Step 3.
-
-    float* l = new float[n + 1];
-    float* u = new float[n + 1];
-    float* z = new float[n + 1];
-    float* c = new float[n + 1];
-    float* b = new float[n + 1];
-    float* d = new float[n + 1];
-
-    l[0] = 1;
-    u[0] = 0;
-    z[0] = 0;
-
-    // Step 4.
-
-    for (i = 1; i <= n - 1; i++)
+    struct helper
     {
-        l[i] = 4.f - u[i - 1];
+        float alpha, l, u, z, c, b, d;
+    }* helpers = (struct helper*)malloc((n + 1) * sizeof(struct helper));
 
-        u[i] = 1.f / l[i];
-
-        z[i] = (alpha[i] - z[i - 1]) / l[i];
+    helpers[0].l = 1;
+    helpers[0].u = 0;
+    helpers[0].z = 0;
+    for (int i = 1; i <= n - 1; i++)
+    {
+        helpers[i].alpha =
+            3.f * (*xs)[i + 1] - 6.f * (*xs)[i] + 3.f * (*xs)[i - 1];
+        helpers[i].l = 4.f - helpers[i - 1].u;
+        helpers[i].u = 1.f / helpers[i].l;
+        helpers[i].z = (helpers[i].alpha - helpers[i - 1].z) / helpers[i].l;
     }
 
-    // Step 5.
-
-    l[n] = 1;
-    z[n] = 0;
-    c[n] = 0;
-
-    // Step 6.
-
-    for (i = n - 1; i >= 0; i--)
+    helpers[n].l = 1;
+    helpers[n].z = 0;
+    helpers[n].c = 0;
+    for (int i = n - 1; i >= 0; i--)
     {
-        c[i] = z[i] - u[i] * c[i + 1];
+        helpers[i].c = helpers[i].z - helpers[i].u * helpers[i + 1].c;
 
-        b[i] = ((*xs)[i + 1] - (*xs)[i]) - (c[i + 1] + 2 * c[i]) / 3.f;
+        helpers[i].b = ((*xs)[i + 1] - (*xs)[i]) -
+                       (helpers[i + 1].c + 2 * helpers[i].c) / 3.f;
 
-        d[i] = (c[i + 1] - c[i]) / 3.f;
+        helpers[i].d = (helpers[i + 1].c - helpers[i].c) / 3.f;
     }
 
-    for (i = 0; i <= n - 1; i++)
+    for (int i = 0; i <= n - 1; i++)
     {
-        float x = (float)i;
-
         float inc = 0.03f;
-
-        for (; x < i + 1; x += inc)
+        for (float t = (float)i; t < i + 1; t += inc)
         {
-            float x_offset = x - i;
+            float t_offset = t - i;
 
-            float Sx = (*xs)[i] + b[i] * x_offset + c[i] * x_offset * x_offset +
-                       d[i] * x_offset * x_offset * x_offset;
+            float x = (*xs)[i] + helpers[i].b * t_offset +
+                      helpers[i].c * t_offset * t_offset +
+                      helpers[i].d * t_offset * t_offset * t_offset;
 
-            out_xs->push_back(Sx);
+            out_xs->push_back(x);
         }
     }
 
-    delete[] alpha;
-    delete[] l;
-    delete[] u;
-    delete[] z;
-    delete[] c;
-    delete[] b;
-    delete[] d;
+    free(helpers);
 }
