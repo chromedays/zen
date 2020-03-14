@@ -1,3 +1,5 @@
+rm .\zen.zip
+
 git clean -fdX
 premake5 vs2019
 $compress = @{

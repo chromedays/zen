@@ -70,7 +70,7 @@ local function internal_simple_win32_cpp(name, static_libs, clang_format_path, p
             src_root .. '**.h',
             -- src_root .. '*.hpp',
             src_root .. '**.c',
-            -- src_root .. '*.cpp',
+            src_root .. '**.cpp',
             src_root .. '**.inl',
         }
 
