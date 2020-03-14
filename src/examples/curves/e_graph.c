@@ -714,6 +714,11 @@ static void calc_polynomial_newton(const FVec3* input_points,
     free(temps);
 }
 
+void calc_cubic_spline(const FVec3* input_points,
+                       int input_points_count,
+                       FVec3** out_points,
+                       int* out_points_count);
+
 EXAMPLE_UPDATE_FN_SIG(graph)
 {
     Example* e = (Example*)udata;
@@ -970,6 +975,12 @@ EXAMPLE_UPDATE_FN_SIG(graph)
 
         calc_polynomial_newton(s->control_points, s->control_points_count,
                                values, ARRAY_LENGTH(values));
+
+        FVec3* s_values = NULL;
+        int s_values_count = 0;
+        calc_cubic_spline(s->control_points, s->control_points_count, &s_values,
+                          &s_values_count);
+
         for (int i = 0; i < ARRAY_LENGTH(values); i++)
         {
             values[i].z = 0;
@@ -1049,10 +1060,17 @@ EXAMPLE_UPDATE_FN_SIG(graph)
                   });
 #endif
 
+#if 0
         plt_lines(&plotter, values, ARRAY_LENGTH(values),
+                  &(PlotAttribs){
+                      .color = (FVec4){1, 0, 0, 1},
+                  });
+#endif
+        plt_lines(&plotter, s_values, s_values_count,
                   &(PlotAttribs){
                       .color = (FVec4){1, 1, 1, 1},
                   });
+        free(s_values);
 
         plotter.canvas = canvas;
         plt_draw(e, &plotter, &s->plot_renderer);
@@ -1072,4 +1090,4 @@ EXAMPLE_UPDATE_FN_SIG(graph)
 
 #define USER_CLEANUP s_cleanup(&scene);
 
-//#include "../../win32_main.inl"
+#include "../../win32_main.inl"
